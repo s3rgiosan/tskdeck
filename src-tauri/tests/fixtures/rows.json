@@ -1,0 +1,6 @@
+[
+  {"id":"11111111-0000-4000-8000-000000000001","number":1,"title":"Sketch the launch checklist","status":"open","project":null,"thread":null,"assignee":null,"assignee_kind":null,"base":null,"after":[],"before":[]},
+  {"id":"11111111-0000-4000-8000-000000000002","number":2,"title":"Fix footer links","status":"ready","project":"/home/test/work/site","thread":"polish","assignee":"alice","assignee_kind":"human","base":"main","after":[{"task":1,"done":true}],"before":[],"group":"footer"},
+  {"id":"11111111-0000-4000-8000-000000000003","number":3,"title":"Add contact form","status":"started","project":"/home/test/client/site","thread":null,"assignee":"bot-a","assignee_kind":"agent","base":null,"after":[],"before":[4]},
+  {"id":"11111111-0000-4000-8000-000000000004","number":4,"title":"Publish release notes","status":"blocked","project":"/home/test/client/site","thread":null,"assignee":null,"assignee_kind":null,"base":null,"after":[{"task":3,"done":false}],"before":[],"block":{"why":"Waiting on copy","needs":null,"options":[],"on":"task:7","by":"bot-a","at":[1700000000,5],"edited":false,"replies":[],"answered":false}}
+]

@@ -1,0 +1,8 @@
+[
+  {"id":"22222222-0000-4000-8000-000000000001","number":10,"title":"Choose a colour palette","status":"blocked","project":"/home/test/work/site","thread":null,"assignee":"bot-a","assignee_kind":"agent","base":null,"after":[],"before":[],
+   "block":{"why":"Two palettes fit","needs":"Pick one","options":["Warm","Cool"],"on":"human","by":"bot-a","at":[1700000100,0],"edited":false,
+     "replies":[{"at":[1700000200,10],"by":"alice","text":"Go with Warm","edited":false,"sent":true}],"answered":true},
+   "notes":"Invented notes.",
+   "steps":[{"id":"aaaaaaaa-0000-4000-8000-000000000001","done":true,"short_id":"s1","text":"List candidates"},{"id":"aaaaaaaa-0000-4000-8000-000000000002","done":false,"short_id":"s2","text":"Decide"}],
+   "activity":[{"at":[1700000050,0],"by":"alice","kind":"created","detail":null},{"at":[1700000100,0],"by":"bot-a","kind":"blocked","detail":{"on":"human"}}]}
+]

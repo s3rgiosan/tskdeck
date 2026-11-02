@@ -1,0 +1,7 @@
+[
+  {"id":"33333333-0000-4000-8000-000000000001","number":20,"title":"Refactor nav menu","status":"review","project":"/home/test/work/site","thread":"nav","assignee":"bot-b","assignee_kind":"agent","base":"main","after":[],"before":[],
+   "review":{"round":2,"done":"Split menu into parts","checks":[{"text":"Keyboard works","state":"open"},{"text":"Tests pass","state":"passed"},{"text":"No layout shift","state":"failed"}],"next":null,"on":"human","by":"bot-b","at":[1700001000,0],"edited":false,"feedback":[],"answered":false},
+   "notes":null,"steps":[],
+   "past_reviews":[{"round":1,"done":"First pass","checks":[],"next":"Add tests","on":"human","by":"bot-b","at":[1700000500,0],"edited":false,"feedback":[{"at":[1700000600,0],"by":"alice","text":"Needs tests"}],"answered":true,"closed_at":[1700000700,0],"closed_by":"alice","resolution":"changes requested"}],
+   "activity":[{"at":[1700000400,0],"by":null,"kind":"created","detail":null}]}
+]

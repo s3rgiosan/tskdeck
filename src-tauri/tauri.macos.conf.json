@@ -1,0 +1,32 @@
+{
+  "app": {
+    "windows": [
+      {
+        "title": "tskdeck",
+        "width": 1200,
+        "height": 760,
+        "minWidth": 900,
+        "minHeight": 560,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 19, "y": 28 },
+        "transparent": true,
+        "windowEffects": {
+          "effects": ["sidebar"],
+          "state": "followsWindowActiveState"
+        }
+      }
+    ]
+  },
+  "bundle": {
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "macOS": {
+      "files": {
+        "Resources/Assets.car": "./icons/Assets.car"
+      }
+    }
+  }
+}

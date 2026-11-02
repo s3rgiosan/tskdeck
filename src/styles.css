@@ -1,0 +1,1836 @@
+/*
+ * Colour tokens; every literal colour in the app lives in this block. The literal values serve engines
+ * without WebKit's semantic system colours. Where those exist, the @supports block replaces them, and
+ * each semantic colour resolves to its light or dark value with the system appearance. Tokens without
+ * a system colour keep their literals: --panel and --surface (WebKit has no window or raised background
+ * colour), --link (its LinkText is a fixed blue), and the translucent control, field and toolbar fills.
+ */
+:root {
+  color-scheme: light dark;
+  --background: #ffffff;
+  --panel: #f6f6f6;
+  --surface: #ffffff;
+  --field: #ffffff;
+  --field-border: rgb(0 0 0 / 0.149);
+  --control: rgb(0 0 0 / 0.078);
+  --control-pressed: rgb(0 0 0 / 0.157);
+  --control-ring: transparent;
+  --toolbar-item: rgb(0 0 0 / 0.059);
+  --toolbar-item-rim: rgb(0 0 0 / 0.25);
+  --pane-tab: rgb(0 0 0 / 0.059);
+  --pane-tab-rim: rgb(0 0 0 / 0.13);
+  --chrome-tint: transparent;
+  --label: rgb(0 0 0 / 0.847);
+  --secondary-label: rgb(0 0 0 / 0.498);
+  --disabled-label: rgb(0 0 0 / 0.26);
+  --placeholder: rgb(0 0 0 / 0.498);
+  --separator: rgb(0 0 0 / 0.098);
+  --accent: #007aff;
+  --selection: #0064e1;
+  --selection-unfocused: #dcdcdc;
+  --selection-text: #ffffff;
+  --link: #0068da;
+  --red: #ff383c;
+  --green: #34c759;
+  --orange: #ff8d28;
+  --fill: rgb(0 0 0 / 0.04);
+  --backdrop: rgb(0 0 0 / 0.2);
+  --shadow-modal: 0 10px 36px rgb(0 0 0 / 0.25);
+  --toolbar-height: 66px;
+  --toolbar-row: 52px;
+  --toolbar-item-size: 36px;
+  --traffic-lights: 96px;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1e1e1e;
+    --panel: #282828;
+    --surface: #282828;
+    --field: #1e1e1e;
+    --field-border: rgb(255 255 255 / 0.085);
+    --control: rgb(255 255 255 / 0.078);
+    --control-pressed: rgb(255 255 255 / 0.157);
+    --toolbar-item: rgb(255 255 255 / 0.122);
+    --toolbar-item-rim: rgb(0 0 0 / 0.35);
+    --pane-tab: rgb(255 255 255 / 0.094);
+    --pane-tab-rim: rgb(0 0 0 / 0.25);
+    --chrome-tint: rgb(255 255 255 / 0.035);
+    --label: rgb(255 255 255 / 0.847);
+    --secondary-label: rgb(255 255 255 / 0.549);
+    --disabled-label: rgb(255 255 255 / 0.247);
+    --placeholder: rgb(255 255 255 / 0.55);
+    --separator: rgb(255 255 255 / 0.098);
+    --accent: #007aff;
+    --selection: #0059d1;
+    --selection-unfocused: #464646;
+    --link: #419cff;
+    --red: #ff4245;
+    --green: #30d158;
+    --orange: #ff9230;
+    --fill: rgb(255 255 255 / 0.05);
+    --backdrop: rgb(0 0 0 / 0.35);
+    --shadow-modal: 0 10px 36px rgb(0 0 0 / 0.5);
+  }
+}
+
+/* Follows the fallbacks so it wins in both appearances; it needs no dark block of its own. */
+@supports (color: -apple-system-label) {
+  :root {
+    --background: -apple-system-background;
+    --field: -apple-system-text-background;
+    --label: -apple-system-label;
+    --secondary-label: -apple-system-secondary-label;
+    --disabled-label: -apple-system-tertiary-label;
+    --placeholder: -apple-system-placeholder-text;
+    --separator: -apple-system-separator;
+    --accent: -apple-system-control-accent;
+    --selection: -apple-system-selected-content-background;
+    --selection-unfocused: -apple-system-unemphasized-selected-content-background;
+    --selection-text: -apple-system-alternate-selected-text;
+    --fill: -apple-system-odd-alternating-content-background;
+    --red: -apple-system-red;
+    --green: -apple-system-green;
+    --orange: -apple-system-orange;
+  }
+}
+
+/* In the dark appearance a field is darker than the window behind it, as the system text field is. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --field: rgb(0 0 0 / 0.27);
+  }
+}
+
+/* Increase Contrast: firmer borders and separators, darker secondary text. Follows the system colours so it wins. */
+@media (prefers-contrast: more) {
+  :root {
+    --field-border: rgb(0 0 0 / 0.5);
+    --control-ring: rgb(0 0 0 / 0.5);
+    --toolbar-item-rim: rgb(0 0 0 / 0.6);
+    --pane-tab-rim: rgb(0 0 0 / 0.5);
+    --secondary-label: rgb(0 0 0 / 0.7);
+    --placeholder: rgb(0 0 0 / 0.6);
+    --separator: rgb(0 0 0 / 0.3);
+  }
+}
+
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root {
+    --field-border: rgb(255 255 255 / 0.5);
+    --control-ring: rgb(255 255 255 / 0.5);
+    --toolbar-item-rim: rgb(255 255 255 / 0.5);
+    --pane-tab-rim: rgb(255 255 255 / 0.4);
+    --secondary-label: rgb(255 255 255 / 0.75);
+    --placeholder: rgb(255 255 255 / 0.65);
+    --separator: rgb(255 255 255 / 0.3);
+  }
+}
+
+/* Without window controls in the toolbar (full screen, or a system title bar) the sidebar toggle leads it. */
+html:not(.is-mac),
+html.is-fullscreen {
+  --traffic-lights: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--background);
+  color: var(--label);
+  font: 13px/16px var(--font);
+  overflow: hidden;
+}
+
+/* Window chrome stays out of text selection; content, names and errors keep the default. */
+button,
+.sidebar,
+.toolbar,
+.section-title,
+.group-title,
+.sub-title,
+.pane-section-title,
+.row,
+.row-number,
+.row-status,
+.drawer-head,
+.markbar {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Push buttons: borderless with a tinted fill, 24px tall. */
+button {
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--control);
+  border: 0;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--control-ring);
+  color: var(--label);
+  cursor: default;
+  font: inherit;
+  line-height: 16px;
+  min-height: 24px;
+  padding: 4px 12px;
+}
+
+button:active:not(:disabled) {
+  background: var(--control-pressed);
+}
+
+button:disabled {
+  color: var(--disabled-label);
+}
+
+/* The default button takes the accent; it greys out with the rest of the window when another window is key. */
+button[type="submit"],
+button.is-default {
+  background: var(--accent);
+  box-shadow: none;
+  color: var(--selection-text);
+}
+
+button[type="submit"]:active:not(:disabled),
+button.is-default:active:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(0.88);
+}
+
+button[type="submit"]:disabled,
+button.is-default:disabled,
+html.window-inactive :is(button[type="submit"], button.is-default) {
+  background: var(--control);
+  box-shadow: inset 0 0 0 1px var(--control-ring);
+  color: var(--label);
+}
+
+button[type="submit"]:disabled,
+button.is-default:disabled {
+  color: var(--disabled-label);
+}
+
+/* A borderless symbol button. */
+.icon-button {
+  align-items: center;
+  background: transparent;
+  border-radius: 6px;
+  box-shadow: none;
+  color: var(--secondary-label);
+  display: inline-flex;
+  flex: none;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  width: 28px;
+}
+
+.icon-button:active:not(:disabled) {
+  background: transparent;
+  color: var(--label);
+}
+
+/* Pop-up buttons: a push button's shape with the up-and-down chevrons at the trailing end. */
+.popup {
+  align-items: center;
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  position: relative;
+}
+
+.popup select {
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--control);
+  border: 0;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--control-ring);
+  color: var(--label);
+  cursor: default;
+  font: inherit;
+  height: 24px;
+  line-height: 16px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 4px 24px 4px 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.popup select:active:not(:disabled) {
+  background: var(--control-pressed);
+}
+
+.popup select:disabled,
+.popup:has(select:disabled) .symbol {
+  color: var(--disabled-label);
+}
+
+.popup .symbol {
+  color: var(--label);
+  pointer-events: none;
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Text fields, search fields and text areas share one shape: a 1px border, 7px corners, 26px tall. */
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"])),
+:where(textarea) {
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-user-select: text;
+  background: var(--field);
+  border: 1px solid var(--field-border);
+  border-radius: 7px;
+  color: var(--label);
+  font: inherit;
+  height: 26px;
+  margin: 0;
+  min-width: 0;
+  padding: 4px 6px;
+  user-select: text;
+}
+
+/* Text areas grow with their text from three lines to ten, then scroll. */
+:where(textarea) {
+  display: block;
+  field-sizing: content;
+  height: auto;
+  max-height: calc(10lh + 10px);
+  min-height: calc(3lh + 10px);
+  overflow-y: auto;
+  resize: none;
+  width: 100%;
+}
+
+::placeholder {
+  color: var(--placeholder);
+  opacity: 1;
+}
+
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+}
+
+:focus-visible {
+  outline: auto;
+}
+
+/* The selected row or item shows where the keyboard is; a ring around the whole list would repeat it. */
+[role="listbox"]:focus-visible {
+  outline: none;
+}
+
+/*
+ * The sidebar, board and task pane side by side. The sidebar runs the full window height, window controls
+ * included; the toolbar covers the board and the task pane, and their content scrolls under it.
+ */
+.shell {
+  --content-left: var(--sidebar-width, 220px);
+  display: grid;
+  grid-template-areas: "side main detail";
+  grid-template-columns: var(--sidebar-width, 220px) minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+  position: relative;
+}
+
+.shell.is-sidebar-hidden {
+  --content-left: 0px;
+  grid-template-areas: "main detail";
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sidebar {
+  background: var(--panel);
+  grid-area: side;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--toolbar-row) 8px 10px;
+}
+
+.side-group {
+  margin-bottom: 14px;
+}
+
+.side-title {
+  color: var(--secondary-label);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  margin: 0 0 4px;
+  padding: 0 8px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 16px;
+  margin: 0 0 4px;
+}
+
+.side-item {
+  align-items: center;
+  border-radius: 6px;
+  cursor: default;
+  display: flex;
+  gap: 6px;
+  min-height: 28px;
+  padding: 5px 8px 5px 6px;
+}
+
+.side-item .symbol {
+  color: var(--accent);
+}
+
+.side-item.is-active {
+  background: var(--selection-unfocused);
+}
+
+.side-item.is-active .side-count {
+  color: var(--label);
+}
+
+/* The highlight exists only while the sidebar has the keyboard. */
+html:not(.window-inactive) .side-item.is-current {
+  background: var(--selection);
+  color: var(--selection-text);
+}
+
+html:not(.window-inactive) .side-item.is-current :is(.side-count, .symbol) {
+  color: var(--selection-text);
+}
+
+.side-item.is-current {
+  background: var(--selection-unfocused);
+}
+
+.side-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-count {
+  color: var(--secondary-label);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 15px;
+}
+
+.side-empty {
+  color: var(--secondary-label);
+  padding: 6px 8px;
+}
+
+.side-filter {
+  margin: 0 0 4px;
+  width: 100%;
+}
+
+/* Dividers that resize the sidebar and the task pane; an 8px hit area centred on the edge. */
+.splitter {
+  cursor: col-resize;
+  position: absolute;
+  top: var(--toolbar-height);
+  bottom: 0;
+  width: 8px;
+  z-index: 6;
+}
+
+.splitter:focus-visible {
+  background: linear-gradient(var(--accent), var(--accent)) center / 2px 100% no-repeat;
+  outline: none;
+}
+
+.sidebar-splitter {
+  left: calc(var(--sidebar-width, 220px) - 4px);
+}
+
+.task-area > .splitter {
+  left: -5px;
+}
+
+html.is-resizing,
+html.is-resizing * {
+  -webkit-user-select: none;
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+.main {
+  background: var(--background);
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+.board {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/*
+ * The toolbar over the board and the task pane: the title at its leading edge, pop-ups in the centre,
+ * New Task and search at the trailing end, a hairline under it. The sidebar toggle sits at the sidebar's
+ * top-right corner; with the sidebar hidden it follows the window controls and the toolbar spans the window.
+ * The items are centred in the top 52px band; the rest of the height is space above the hairline.
+ */
+.toolbar {
+  align-items: center;
+  background: linear-gradient(var(--chrome-tint), var(--chrome-tint)), var(--background);
+  border-bottom: 0.5px solid var(--separator);
+  display: flex;
+  gap: 8px;
+  height: var(--toolbar-height);
+  left: var(--content-left);
+  min-width: 0;
+  padding: 0 8px 14px 20px;
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 5;
+}
+
+.shell.is-sidebar-hidden .toolbar {
+  padding-left: var(--traffic-lights);
+}
+
+.toolbar-leading,
+.toolbar-center,
+.toolbar-trailing {
+  align-items: center;
+  display: flex;
+}
+
+.toolbar-leading {
+  align-items: center;
+  display: flex;
+  flex: none;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* The toggle sits inside the sidebar's trailing edge, 8px from it. */
+.shell:not(.is-sidebar-hidden) .sidebar-toggle {
+  left: calc(-1 * (var(--toolbar-item-size) + 8px));
+  position: absolute;
+  top: calc((var(--toolbar-row) - var(--toolbar-item-size)) / 2);
+}
+
+/* Toolbar items: round 36px buttons and capsules with a faint fill and rim. */
+.toolbar-button {
+  align-items: center;
+  background: var(--toolbar-item);
+  border-radius: 50%;
+  box-shadow: 0 0 0 0.5px var(--toolbar-item-rim);
+  color: var(--label);
+  display: inline-flex;
+  flex: none;
+  height: var(--toolbar-item-size);
+  justify-content: center;
+  padding: 0;
+  width: var(--toolbar-item-size);
+}
+
+.toolbar-button:active:not(:disabled) {
+  background: var(--control-pressed);
+}
+
+/* The title leads the toolbar, after the toggle when the sidebar is hidden. */
+.toolbar-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 20px;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html.window-inactive :is(.toolbar-title, .toolbar-button, .toolbar-popup select, .toolbar-popup .symbol) {
+  color: var(--secondary-label);
+}
+
+.toolbar-center {
+  flex: none;
+  gap: 10px;
+}
+
+.toolbar-popup select {
+  background: var(--toolbar-item);
+  border-radius: calc(var(--toolbar-item-size) / 2);
+  box-shadow: 0 0 0 0.5px var(--toolbar-item-rim);
+  height: var(--toolbar-item-size);
+  padding: 0 30px 0 13px;
+}
+
+.toolbar-popup .symbol {
+  right: 10px;
+}
+
+.toolbar-trailing {
+  flex: 0 1 300px;
+  gap: 8px;
+  margin-left: auto;
+  min-width: 140px;
+}
+
+.search-field {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.search-field .symbol {
+  color: var(--secondary-label);
+  left: 10px;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* The toolbar's search field is a capsule like the other toolbar items. */
+.search-field input {
+  background: var(--toolbar-item);
+  border: 0;
+  border-radius: calc(var(--toolbar-item-size) / 2);
+  box-shadow: 0 0 0 0.5px var(--toolbar-item-rim);
+  height: var(--toolbar-item-size);
+  padding: 0 12px 0 32px;
+  width: 100%;
+}
+
+/* The board starts below the toolbar; scrolled content passes under it. */
+.board-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: calc(var(--toolbar-height) + 4px) 14px 24px;
+}
+
+.main.has-markbar .board-scroll {
+  padding-top: calc(var(--toolbar-height) + 27px);
+}
+
+.board-note {
+  color: var(--secondary-label);
+  padding: 24px 8px;
+}
+
+/* A title, a line of secondary text and one push button, centred in the board. */
+.empty-state {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18vh 16px 24px;
+  text-align: center;
+}
+
+.empty-state h2 {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 22px;
+  margin: 0;
+}
+
+.empty-state p {
+  color: var(--secondary-label);
+  font-size: 13px;
+  line-height: 16px;
+  margin: 0 0 12px;
+}
+
+.loading {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.spinner {
+  animation: spin 0.8s linear infinite;
+  border: 1.5px solid var(--separator);
+  border-radius: 50%;
+  border-top-color: var(--secondary-label);
+  flex: none;
+  height: 12px;
+  width: 12px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    display: none;
+  }
+}
+
+.section {
+  margin-bottom: 20px;
+}
+
+.section-count {
+  color: var(--secondary-label);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  line-height: 15px;
+  margin-left: 4px;
+}
+
+.group-title,
+.sub-title {
+  color: var(--secondary-label);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 16px;
+  margin: 10px 0 2px;
+}
+
+.row {
+  align-items: center;
+  border-radius: 6px;
+  cursor: default;
+  display: flex;
+  gap: 8px;
+  min-height: 28px;
+  padding: 6px 8px;
+}
+
+.row.is-cursor,
+.row.is-marked {
+  background: var(--selection-unfocused);
+}
+
+.row.is-cursor :is(.row-number, .row-wait, .row-tag),
+.row.is-marked :is(.row-number, .row-wait, .row-tag) {
+  color: var(--label);
+}
+
+.row.is-marked {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+html:not(.window-inactive) :is(.board-list, .drawer-group [role="listbox"]):focus-within .row.is-cursor {
+  background: var(--selection);
+  color: var(--selection-text);
+}
+
+html:not(.window-inactive) :is(.board-list, .drawer-group [role="listbox"]):focus-within .row.is-cursor.is-marked {
+  box-shadow: inset 3px 0 0 var(--selection-text);
+}
+
+html:not(.window-inactive) :is(.board-list, .drawer-group [role="listbox"]):focus-within .row.is-cursor :is(.row-number, .row-wait, .row-tag) {
+  color: var(--selection-text);
+}
+
+html:not(.window-inactive) :is(.board-list, .drawer-group [role="listbox"]):focus-within .row.is-cursor .row-status {
+  --dot: var(--selection-text);
+}
+
+.row-number {
+  color: var(--secondary-label);
+  flex: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 15px;
+  min-width: 34px;
+}
+
+.row-status {
+  --dot: var(--secondary-label);
+  background: var(--dot);
+  border-radius: 50%;
+  flex: none;
+  height: 8px;
+  position: relative;
+  width: 8px;
+}
+
+/*
+ * Open is a hollow ring, ready a filled dot, started a ring around a dot, blocked a red dot, in review a
+ * red diamond, done a check mark.
+ */
+.status-open {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--dot);
+}
+
+.status-started {
+  --dot: var(--orange);
+  background: radial-gradient(circle, var(--dot) 0 30%, transparent 36%);
+  box-shadow: inset 0 0 0 1.5px var(--dot);
+}
+
+.status-blocked,
+.status-review {
+  --dot: var(--red);
+}
+
+.status-review {
+  border-radius: 1px;
+  transform: rotate(45deg) scale(0.88);
+}
+
+.status-ready {
+  --dot: var(--accent);
+}
+
+.status-done {
+  background: transparent;
+  border-radius: 0;
+}
+
+.status-done::after {
+  border: solid var(--dot);
+  border-width: 0 1.5px 1.5px 0;
+  content: "";
+  height: 7px;
+  left: 2.5px;
+  position: absolute;
+  top: -0.5px;
+  transform: rotate(45deg);
+  width: 3.5px;
+}
+
+.row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-wait,
+.row-tag {
+  color: var(--secondary-label);
+  flex: none;
+  font-size: 12px;
+  line-height: 15px;
+}
+
+.row-tag {
+  align-items: center;
+  display: inline-flex;
+  gap: 2px;
+}
+
+/* The task pane or the done drawer beside the board; its content starts below the toolbar and scrolls under it. */
+.task-area {
+  background: var(--background);
+  border-left: 1px solid var(--separator);
+  grid-area: detail;
+  min-height: 0;
+  position: relative;
+  width: var(--pane-width, 420px);
+}
+
+.task-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding-top: var(--toolbar-height);
+}
+
+/* The task inspector: sections 20px apart inside 20px side margins. */
+.task-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 12px 20px 20px;
+}
+
+.pane-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Number and status on one line, the close button at its trailing end. */
+.pane-meta {
+  -webkit-user-select: none;
+  align-items: center;
+  color: var(--secondary-label);
+  display: flex;
+  font-size: 12px;
+  gap: 6px;
+  line-height: 15px;
+  min-height: 28px;
+  user-select: none;
+}
+
+.pane-status {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+/* The glyph lines up with the content edge; the hit area reaches into the margin. */
+.pane-close {
+  margin: 0 -8px 0 auto;
+}
+
+.pane-title {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 26px;
+  overflow-wrap: anywhere;
+}
+
+.pane-notes {
+  font-size: 15px;
+  line-height: 20px;
+  margin-top: 12px;
+}
+
+.pane-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  margin: 0 0 8px;
+}
+
+/* Editable text keeps its place; the hover tint reaches a little past it on every side. */
+.inline {
+  border-radius: 5px;
+  cursor: text;
+  margin: -2px -4px;
+  min-height: 16px;
+  padding: 2px 4px;
+  white-space: pre-wrap;
+}
+
+.inline:hover {
+  background: var(--fill);
+}
+
+.muted {
+  color: var(--secondary-label);
+}
+
+/* Right-aligned labels in a fixed column; each control fills the second column up to 280px. */
+.fields {
+  align-items: start;
+  column-gap: 8px;
+  display: grid;
+  grid-template-columns: 80px minmax(0, 280px);
+  margin: 0;
+  row-gap: 4px;
+}
+
+.fields dt {
+  align-items: center;
+  color: var(--secondary-label);
+  display: flex;
+  justify-content: flex-end;
+  min-height: 28px;
+  text-align: right;
+}
+
+.fields dd {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: 0;
+  min-height: 28px;
+  min-width: 0;
+}
+
+.assignee,
+.runs-after {
+  width: 100%;
+}
+
+/* The status pop-up fills the row beside its Actions pull-down. */
+.fields dd > .popup {
+  flex: 1 1 0;
+}
+
+.fields .field-value {
+  flex-wrap: nowrap;
+}
+
+.field-value .symbol {
+  color: var(--secondary-label);
+}
+
+.assignee {
+  display: block;
+  position: relative;
+}
+
+.assignee input {
+  width: 100%;
+}
+
+.assignee input.has-clear {
+  padding-right: 24px;
+}
+
+.field-clear {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--secondary-label);
+  display: flex;
+  height: 28px;
+  justify-content: center;
+  min-height: 0;
+  padding: 0;
+  position: absolute;
+  right: -2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+}
+
+.runs-after {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+
+.chip {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.chip.is-done {
+  color: var(--secondary-label);
+}
+
+/* A group box: a tinted panel that holds the open block or review, or a form. */
+.group-box {
+  background: var(--fill);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.group-box p {
+  margin: 0;
+}
+
+.group-box-head {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  justify-content: space-between;
+}
+
+.group-box-title {
+  align-items: baseline;
+  display: flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 6px;
+  line-height: 16px;
+  margin: 0;
+}
+
+.group-box-note,
+.waits-line,
+.reply-meta {
+  color: var(--secondary-label);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 15px;
+}
+
+/* A text button in the link colour; the padding gives it a 28px-tall hit area without moving the text. */
+.link-button {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--link);
+  font: inherit;
+  margin: -6px -4px;
+  min-height: 0;
+  padding: 6px 4px;
+}
+
+.group-box-actions,
+.waits-edit,
+.waits-on {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.group-box-actions {
+  justify-content: flex-end;
+}
+
+.waits-on {
+  gap: 6px;
+}
+
+.card label {
+  color: var(--secondary-label);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card label > input:not([type="checkbox"]) {
+  width: 100%;
+}
+
+.options,
+.checks,
+.replies,
+.activity,
+.steps ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Each option shows the digit that picks it, so the list draws no numbers of its own. */
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.options button {
+  align-items: baseline;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.checks,
+.replies {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.replies {
+  gap: 8px;
+}
+
+.checks li {
+  align-items: baseline;
+  display: flex;
+  gap: 6px;
+}
+
+.reply-meta {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.earlier summary {
+  color: var(--secondary-label);
+  cursor: default;
+}
+
+.earlier-round {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.steps li {
+  align-items: center;
+  border-radius: 5px;
+  display: flex;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.steps li input[type="checkbox"] {
+  flex: none;
+  margin: 0 0 0 2px;
+}
+
+.step-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.step-text.is-done {
+  color: var(--secondary-label);
+}
+
+/* The remove button shows on the row under the pointer or holding the keyboard. */
+.step-remove {
+  opacity: 0;
+}
+
+.steps li:hover .step-remove,
+.steps li:focus-within .step-remove {
+  opacity: 1;
+}
+
+.drop-end {
+  height: 4px;
+}
+
+.step-new {
+  width: 100%;
+}
+
+.activity {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* The time sits at the trailing end, or on its own line when the text fills the row. */
+.activity li {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 12px;
+}
+
+.activity-time {
+  color: var(--secondary-label);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 15px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.pane-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* The word names the state; the tint only sorts the badges at a glance. */
+.badge {
+  border-radius: 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 14px;
+  padding: 1px 6px;
+}
+
+.badge-open {
+  background: color-mix(in srgb, var(--label) 10%, transparent);
+}
+
+.badge-passed {
+  background: color-mix(in srgb, var(--green) 25%, transparent);
+}
+
+.badge-failed {
+  background: color-mix(in srgb, var(--red) 25%, transparent);
+}
+
+/* Error text keeps the label colour; the red bar marks it as an error. */
+.flow-error,
+.keymap-editor [role="alert"] {
+  border-left: 3px solid var(--red);
+  margin: 0;
+  padding-left: 8px;
+}
+
+kbd {
+  color: var(--secondary-label);
+  font-family: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 15px;
+}
+
+/* A screen that fills the window in place of the board; its empty space drags the window. */
+.screen {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.screen.is-centred {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.missing {
+  margin: 20vh auto 0;
+  max-width: 440px;
+  padding: 0 16px;
+}
+
+.missing h1 {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 26px;
+  margin: 0 0 8px;
+}
+
+.missing a {
+  color: var(--link);
+}
+
+.missing-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* The multi-select bar sits just below the toolbar, over the top of the board. */
+.markbar {
+  background: var(--selection-unfocused);
+  font-size: 12px;
+  left: 0;
+  line-height: 15px;
+  padding: 4px 12px;
+  position: absolute;
+  right: 0;
+  top: var(--toolbar-height);
+  z-index: 1;
+}
+
+.drawer {
+  padding: 4px 14px 12px;
+}
+
+.drawer-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Sheets hang from the bottom of the toolbar over a lightly dimmed window, sliding down as they open. */
+.modal {
+  animation: sheet-in 0.2s ease-out;
+  background: var(--surface);
+  border: 0;
+  border-radius: 12px;
+  box-shadow: var(--shadow-modal);
+  color: var(--label);
+  margin: calc(var(--toolbar-height) - 6px) auto auto;
+  max-height: calc(100% - var(--toolbar-height) - 24px);
+  overflow-y: auto;
+  padding: 0;
+  width: min(520px, 92%);
+}
+
+.modal::backdrop {
+  animation: backdrop-in 0.2s ease-out;
+  background: var(--backdrop);
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal {
+    animation-name: backdrop-in;
+  }
+}
+
+.modal.overlay-modal {
+  width: min(640px, 92%);
+}
+
+.modal.palette {
+  animation: none;
+  margin-top: 12vh;
+  width: min(640px, 92%);
+}
+
+.sheet-title {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 16px;
+  margin: 0;
+  padding: 20px 20px 0;
+}
+
+.sheet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 16px 20px 20px;
+}
+
+.sheet-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sheet-help {
+  color: var(--secondary-label);
+  font-size: 12px;
+  line-height: 15px;
+}
+
+/* A file path shown in full: it wraps at any character and can be selected and copied. */
+.sheet-path {
+  -webkit-user-select: text;
+  color: var(--secondary-label);
+  font-size: 12px;
+  line-height: 15px;
+  margin: 0;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.sheet-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.modal > .flow-error {
+  margin: 0 20px 20px;
+}
+
+.palette input {
+  border: 0;
+  border-bottom: 1px solid var(--separator);
+  border-radius: 0;
+  height: auto;
+  padding: 10px 14px;
+  width: 100%;
+}
+
+.palette ul,
+.keymap-editor ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.palette li {
+  align-items: center;
+  cursor: default;
+  display: flex;
+  justify-content: space-between;
+  min-height: 28px;
+  padding: 6px 14px;
+}
+
+.palette li.is-active {
+  background: var(--selection);
+  color: var(--selection-text);
+}
+
+.palette li.is-active kbd {
+  color: var(--selection-text);
+}
+
+.palette .palette-empty {
+  color: var(--secondary-label);
+  cursor: default;
+}
+
+.settings-window {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/*
+ * The settings window's title bar: on macOS the window title sits centred at the top beside the window
+ * controls, above the pane buttons, with a hairline under the band. Elsewhere the system title bar
+ * shows the title.
+ */
+.settings-titlebar {
+  -webkit-user-select: none;
+  align-items: center;
+  background: linear-gradient(var(--chrome-tint), var(--chrome-tint)), var(--background);
+  border-bottom: 0.5px solid var(--separator);
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  padding: 6px 8px;
+  user-select: none;
+}
+
+.settings-title {
+  display: none;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 16px;
+  margin: 0;
+}
+
+html.is-mac .settings-titlebar {
+  height: 88px;
+  padding: 7px 8px 0;
+}
+
+html.is-mac .settings-title {
+  display: block;
+}
+
+html.is-mac.window-inactive .settings-title {
+  color: var(--secondary-label);
+}
+
+/* Pane buttons: symbol above label, the current pane in a tinted box. */
+.pane-toolbar {
+  display: flex;
+  justify-content: center;
+}
+
+html.is-mac .pane-toolbar {
+  margin-top: 10px;
+}
+
+.pane-toolbar [role="tab"] {
+  align-items: center;
+  background: transparent;
+  border-radius: 9px;
+  box-shadow: none;
+  color: var(--secondary-label);
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  gap: 1px;
+  height: 47px;
+  line-height: 14px;
+  min-width: 55px;
+  padding: 1px 8px 5px;
+}
+
+.pane-toolbar [role="tab"] .symbol {
+  margin-bottom: -2px;
+}
+
+.pane-toolbar [role="tab"][aria-selected="true"] {
+  background: var(--pane-tab);
+  box-shadow: inset 0 0 0 0.5px var(--pane-tab-rim);
+  color: var(--label);
+}
+
+.pane-toolbar [role="tab"][aria-selected="true"] .symbol {
+  background-color: var(--accent);
+}
+
+.settings-pane {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+/* A form with labels right-aligned in the first column and their controls in the second. */
+.form-grid {
+  align-items: baseline;
+  column-gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
+  row-gap: 14px;
+}
+
+.form-label {
+  text-align: right;
+}
+
+/* The narrower label column of the task pane, for sheets. */
+.form-grid.is-compact {
+  grid-template-columns: 80px minmax(0, 1fr);
+  row-gap: 10px;
+}
+
+.form-label,
+.form-value {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.form-grid.is-compact .form-label {
+  color: var(--secondary-label);
+}
+
+.form-grid input:not([type="radio"], [type="checkbox"]) {
+  width: 100%;
+}
+
+/* A line under the control in the second column, such as an error. */
+.form-note {
+  grid-column: 2;
+}
+
+.form-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-choices label {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.form-choices input {
+  margin: 0;
+}
+
+.form-field {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.form-field input[type="text"] {
+  flex: 1;
+}
+
+.keymap-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.keymap-head {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.keymap-head p {
+  color: var(--secondary-label);
+  margin: 0;
+}
+
+.keymap-editor li {
+  align-items: center;
+  border-bottom: 1px solid var(--separator);
+  display: flex;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 0;
+}
+
+.keymap-editor li:last-child {
+  border-bottom: 0;
+}
+
+.keymap-label {
+  flex: 1;
+}
+
+.keymap-conflict {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+/* On macOS the window's sidebar material shows through the sidebar. */
+html.is-mac body:has(.shell) {
+  background: transparent;
+}
+
+html.is-mac .sidebar {
+  background: transparent;
+}
+
+html.is-mac.reduce-transparency body:has(.shell) {
+  background: var(--background);
+}
+
+html.is-mac.reduce-transparency .sidebar {
+  background: var(--panel);
+}
+
+/* SF Symbols exported as masks, drawn in the current text colour. */
+.symbol {
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  background-color: currentColor;
+  display: inline-block;
+  flex: none;
+}
+
+.symbol-tray,
+.symbol-rectangle-stack,
+.symbol-folder,
+.symbol-number,
+.symbol-person {
+  height: 18px;
+  width: 18px;
+}
+
+.symbol-number-small,
+.symbol-person-small,
+.symbol-xmark {
+  height: 12px;
+  width: 12px;
+}
+
+.symbol-xmark-circle-fill {
+  height: 14px;
+  width: 14px;
+}
+
+.symbol-sidebar-left,
+.symbol-plus {
+  height: 22px;
+  width: 22px;
+}
+
+.symbol-magnifyingglass,
+.symbol-ellipsis-circle {
+  height: 16px;
+  width: 16px;
+}
+
+.symbol-plus-small {
+  height: 14px;
+  width: 14px;
+}
+
+.symbol-magnifyingglass-large {
+  height: 20px;
+  width: 20px;
+}
+
+.symbol-chevron-up-chevron-down {
+  height: 14px;
+  width: 14px;
+}
+
+.symbol-gearshape,
+.symbol-keyboard {
+  height: 28px;
+  width: 28px;
+}
+
+.symbol-tray {
+  -webkit-mask-image: url("./assets/symbols/tray.png");
+  mask-image: url("./assets/symbols/tray.png");
+}
+
+.symbol-rectangle-stack {
+  -webkit-mask-image: url("./assets/symbols/rectangle-stack.png");
+  mask-image: url("./assets/symbols/rectangle-stack.png");
+}
+
+.symbol-folder {
+  -webkit-mask-image: url("./assets/symbols/folder.png");
+  mask-image: url("./assets/symbols/folder.png");
+}
+
+.symbol-number {
+  -webkit-mask-image: url("./assets/symbols/number.png");
+  mask-image: url("./assets/symbols/number.png");
+}
+
+.symbol-person {
+  -webkit-mask-image: url("./assets/symbols/person.png");
+  mask-image: url("./assets/symbols/person.png");
+}
+
+.symbol-number-small {
+  -webkit-mask-image: url("./assets/symbols/number-small.png");
+  mask-image: url("./assets/symbols/number-small.png");
+}
+
+.symbol-person-small {
+  -webkit-mask-image: url("./assets/symbols/person-small.png");
+  mask-image: url("./assets/symbols/person-small.png");
+}
+
+.symbol-sidebar-left {
+  -webkit-mask-image: url("./assets/symbols/sidebar-left.png");
+  mask-image: url("./assets/symbols/sidebar-left.png");
+}
+
+.symbol-plus {
+  -webkit-mask-image: url("./assets/symbols/plus.png");
+  mask-image: url("./assets/symbols/plus.png");
+}
+
+.symbol-plus-small {
+  -webkit-mask-image: url("./assets/symbols/plus.png");
+  mask-image: url("./assets/symbols/plus.png");
+}
+
+.symbol-ellipsis-circle {
+  -webkit-mask-image: url("./assets/symbols/ellipsis-circle.png");
+  mask-image: url("./assets/symbols/ellipsis-circle.png");
+}
+
+.symbol-magnifyingglass {
+  -webkit-mask-image: url("./assets/symbols/magnifyingglass.png");
+  mask-image: url("./assets/symbols/magnifyingglass.png");
+}
+
+.symbol-magnifyingglass-large {
+  -webkit-mask-image: url("./assets/symbols/magnifyingglass-large.png");
+  mask-image: url("./assets/symbols/magnifyingglass-large.png");
+}
+
+.symbol-chevron-up-chevron-down {
+  -webkit-mask-image: url("./assets/symbols/chevron-up-chevron-down.png");
+  mask-image: url("./assets/symbols/chevron-up-chevron-down.png");
+}
+
+.symbol-xmark {
+  -webkit-mask-image: url("./assets/symbols/xmark.png");
+  mask-image: url("./assets/symbols/xmark.png");
+}
+
+.symbol-xmark-circle-fill {
+  -webkit-mask-image: url("./assets/symbols/xmark-circle-fill.png");
+  mask-image: url("./assets/symbols/xmark-circle-fill.png");
+}
+
+.symbol-gearshape {
+  -webkit-mask-image: url("./assets/symbols/gearshape.png");
+  mask-image: url("./assets/symbols/gearshape.png");
+}
+
+.symbol-keyboard {
+  -webkit-mask-image: url("./assets/symbols/keyboard.png");
+  mask-image: url("./assets/symbols/keyboard.png");
+}
