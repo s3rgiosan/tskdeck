@@ -156,6 +156,7 @@ mod tests {
         assert_eq!(locate(Some(&missing), None, std::slice::from_ref(&c)), Some(c));
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn default_candidates_cover_unix_locations() {
         let list = default_candidates(Some(Path::new("/home/u")), None);
