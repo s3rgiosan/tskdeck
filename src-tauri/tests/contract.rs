@@ -175,3 +175,164 @@ fn contract_with_real_tsk() {
         .expect("archived row");
     assert!(row.archived.is_some());
 }
+
+fn step_ids(tsk: &Tsk, number: u64) -> Vec<String> {
+    detail(tsk, number)
+        .steps
+        .iter()
+        .map(|s| s.short_id.clone())
+        .collect()
+}
+
+#[test]
+#[ignore]
+fn contract_steps_edit_status_and_scopes() {
+    let store = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let project_path = project.path().to_string_lossy().into_owned();
+    let tsk = tsk_for(store.path());
+
+    let added: AddResult = tsk
+        .json(&add_args(&CaptureInput {
+            title: "scoped".into(),
+            notes: None,
+            project: Some(project_path.clone()),
+            thread: Some("auth".into()),
+            assignee: Some("zed".into()),
+        }))
+        .unwrap();
+    let n = added.number;
+
+    // steps: add three, then toggle, rename, move and remove by short id
+    for text in ["one", "two", "three"] {
+        let add = StepOp::Add {
+            text: text.into(),
+            place: None,
+        };
+        tsk.run(&steps_args(n, &add)).unwrap();
+    }
+    let ids = step_ids(&tsk, n);
+    assert_eq!(ids.len(), 3);
+
+    tsk.run(&steps_args(n, &StepOp::Toggle { id: ids[0].clone() }))
+        .unwrap();
+    assert!(detail(&tsk, n).steps[0].done);
+
+    let rename = StepOp::Rename {
+        id: ids[1].clone(),
+        text: "--renamed".into(),
+    };
+    tsk.run(&steps_args(n, &rename)).unwrap();
+    assert_eq!(detail(&tsk, n).steps[1].text, "--renamed");
+
+    let to_front = StepOp::Move {
+        id: ids[2].clone(),
+        place: Place::First,
+    };
+    tsk.run(&steps_args(n, &to_front)).unwrap();
+    assert_eq!(detail(&tsk, n).steps[0].short_id, ids[2]);
+
+    let after = StepOp::Move {
+        id: ids[2].clone(),
+        place: Place::After { id: ids[1].clone() },
+    };
+    tsk.run(&steps_args(n, &after)).unwrap();
+    let order = step_ids(&tsk, n);
+    assert_eq!(order, vec![ids[0].clone(), ids[1].clone(), ids[2].clone()]);
+
+    tsk.run(&steps_args(n, &StepOp::Remove { id: ids[1].clone() }))
+        .unwrap();
+    assert_eq!(detail(&tsk, n).steps.len(), 2);
+
+    // edit --after, then --clear-after
+    let second: AddResult = tsk.json(&add_args(&capture("second"))).unwrap();
+    let link = EditInput {
+        title: None,
+        notes: None,
+        assignee: None,
+        unassign: false,
+        after: Some(vec![second.number]),
+        on: None,
+    };
+    tsk.run(&edit_args(n, &link)).unwrap();
+    let linked = detail(&tsk, n).row.after;
+    assert_eq!(linked.len(), 1);
+    assert_eq!(linked[0].task, second.number);
+
+    let clear = EditInput {
+        after: Some(vec![]),
+        ..link
+    };
+    tsk.run(&edit_args(n, &clear)).unwrap();
+    assert!(detail(&tsk, n).row.after.is_empty());
+
+    // listing by project, thread and assignee scope
+    let scopes = [
+        Scope::Project {
+            path: project_path.clone(),
+        },
+        Scope::Thread {
+            name: "auth".into(),
+        },
+        Scope::Assignee { name: "zed".into() },
+    ];
+    for scope in scopes {
+        let rows: Vec<TaskRow> = tsk.json(&list_args(&scope, &live())).unwrap();
+        assert_eq!(rows.len(), 1, "{scope:?}");
+        assert_eq!(rows[0].number, n);
+    }
+    let desk: Vec<TaskRow> = tsk.json(&list_args(&Scope::Desk, &live())).unwrap();
+    assert_eq!(
+        desk.iter().map(|r| r.number).collect::<Vec<_>>(),
+        vec![second.number]
+    );
+
+    // a project group on a project or desk scope is not sent, so tsk accepts the list
+    let grouped = ListOptions {
+        shelf: Shelf::Live,
+        group: Group::Project,
+        sort: Sort::Project,
+    };
+    for scope in [Scope::Desk, Scope::Project { path: project_path }] {
+        tsk.json::<Vec<TaskRow>>(&list_args(&scope, &grouped))
+            .unwrap_or_else(|e| panic!("{scope:?}: {e}"));
+    }
+
+    // started --again, then done --clean, then archive and unarchive
+    let start = StatusChange::Start {
+        dispatch: false,
+        again: false,
+        force: false,
+    };
+    tsk.run(&status_args(n, &start)).unwrap();
+    let again = StatusChange::Start {
+        dispatch: false,
+        again: true,
+        force: false,
+    };
+    tsk.run(&status_args(n, &again)).unwrap();
+    assert_eq!(detail(&tsk, n).row.status, Status::Started);
+
+    tsk.run(&status_args(n, &StatusChange::Done { clean: true }))
+        .unwrap();
+    assert_eq!(detail(&tsk, n).row.status, Status::Done);
+
+    let on_shelf = |shelf: Shelf| -> Vec<TaskRow> {
+        let options = ListOptions {
+            shelf,
+            group: Group::None,
+            sort: Sort::Recent,
+        };
+        tsk.json(&list_args(&Scope::All, &options)).unwrap()
+    };
+    tsk.run(&archive_args(n, true)).unwrap();
+    let archived = on_shelf(Shelf::Archived);
+    assert!(
+        archived
+            .iter()
+            .any(|r| r.number == n && r.archived.is_some())
+    );
+    tsk.run(&archive_args(n, false)).unwrap();
+    assert!(on_shelf(Shelf::Archived).is_empty());
+    assert!(on_shelf(Shelf::Done).iter().any(|r| r.number == n));
+}

@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { ACTIONS } from "./actions";
-import { conflictsFor, DEFAULT_KEYMAP, defaultKeymap, isTextTarget, matches, normalizeEvent, RESERVED, resolveKeymap } from "./keymap";
+import type { ActionId } from "./actions";
+import type { KeyContext } from "./keymap";
+import {
+  actionContext,
+  canonicalBinding,
+  conflictsFor,
+  DEFAULT_KEYMAP,
+  defaultKeymap,
+  isTextTarget,
+  matches,
+  normalizeEvent,
+  RESERVED,
+  resolveKeymap,
+} from "./keymap";
+import type { Handlers } from "./useKeymap";
+import { findHandler } from "./useKeymap";
 
 function key(init: KeyboardEventInit): KeyboardEvent {
   return new KeyboardEvent("keydown", init);
@@ -67,12 +82,29 @@ describe("keymap", () => {
   });
   it("adds the standard command keys after tsk's keys", () => {
     expect(DEFAULT_KEYMAP.undo).toEqual(["ctrl+u", "mod+z"]);
-    expect(DEFAULT_KEYMAP.search).toEqual(["/", "mod+f"]);
-    expect(DEFAULT_KEYMAP.capture).toEqual(["+", "mod+n"]);
     expect(DEFAULT_KEYMAP["focus.toggle"]).toEqual(["ctrl+tab"]);
   });
-  it("defines a default binding for every action", () => {
-    for (const { id } of ACTIONS) expect(DEFAULT_KEYMAP[id].length).toBeGreaterThan(0);
+  it("adds ⌘F for Find and ⌘N for New Task on macOS only, where tsk's Ctrl+F and Ctrl+N stay apart", () => {
+    expect(defaultKeymap(true).search).toEqual(["/", "mod+f"]);
+    expect(defaultKeymap(true).capture).toEqual(["+", "mod+n"]);
+    expect(defaultKeymap(false).search).toEqual(["/"]);
+    expect(defaultKeymap(false).capture).toEqual(["+"]);
+  });
+  it("defines a default binding for every action with keys on the platform", () => {
+    const keyless: [ActionId, boolean][] = [
+      ["help.docs", true],
+      ["help.docs", false],
+      ["zoom.in", true],
+      ["zoom.out", true],
+      ["zoom.reset", true],
+    ];
+    for (const isMac of [true, false]) {
+      const keymap = defaultKeymap(isMac);
+      for (const { id } of ACTIONS) {
+        const expected = keyless.some(([action, mac]) => action === id && mac === isMac) ? 0 : 1;
+        expect(Math.min(keymap[id].length, 1), `${id} ${isMac ? "macOS" : "other"}`).toBe(expected);
+      }
+    }
   });
   it("reports conflicts", () => {
     expect(conflictsFor(resolveKeymap({}), "capture", "ctrl+d", true)).toEqual(["status.done"]);
@@ -162,4 +194,54 @@ describe("platform defaults", () => {
       }
     }
   });
+});
+
+describe("zoom and documentation", () => {
+  it("binds zoom off macOS only, where the View menu has no zoom items", () => {
+    const other = defaultKeymap(false);
+    expect(other["zoom.in"]).toEqual(["mod+="]);
+    expect(other["zoom.out"]).toEqual(["mod+-"]);
+    expect(other["zoom.reset"]).toEqual(["mod+0"]);
+    const mac = defaultKeymap(true);
+    expect(mac["zoom.in"]).toEqual([]);
+    expect(mac["zoom.out"]).toEqual([]);
+    expect(mac["zoom.reset"]).toEqual([]);
+  });
+
+  it("resolves the zoom keys to Ctrl chords off macOS", () => {
+    expect(canonicalBinding("mod+=", false)).toBe("ctrl+=");
+    expect(canonicalBinding("mod+-", false)).toBe("ctrl+-");
+    expect(canonicalBinding("mod+0", false)).toBe("ctrl+0");
+  });
+
+  it("names the zoom and documentation actions and applies them everywhere", () => {
+    const labels = Object.fromEntries(ACTIONS.map((a) => [a.id, a.label]));
+    expect(labels["zoom.in"]).toBe("Zoom In");
+    expect(labels["zoom.out"]).toBe("Zoom Out");
+    expect(labels["zoom.reset"]).toBe("Actual Size");
+    expect(labels["help.docs"]).toBe("tsk Documentation");
+    for (const id of ["zoom.in", "zoom.out", "zoom.reset", "help.docs"] as const) expect(actionContext(id)).toEqual([]);
+  });
+});
+
+describe("default keymap dispatch", () => {
+  const ALL_CONTEXTS: KeyContext[] = ["board", "task"];
+
+  for (const isMac of [true, false]) {
+    it(`sends every default binding to its own action ${isMac ? "on macOS" : "off macOS"}`, () => {
+      const keymap = resolveKeymap({}, isMac);
+      const handlers: Handlers = Object.fromEntries(ACTIONS.map(({ id }) => [id, () => {}]));
+      const shadowed: string[] = [];
+      for (const { id } of ACTIONS) {
+        const scoped = actionContext(id);
+        for (const context of scoped.length > 0 ? scoped : ALL_CONTEXTS) {
+          for (const binding of keymap[id]) {
+            const handler = findHandler(keymap, handlers, context, canonicalBinding(binding, isMac), isMac);
+            if (handler !== handlers[id]) shadowed.push(`${id} ${binding} in ${context}`);
+          }
+        }
+      }
+      expect(shadowed).toEqual([]);
+    });
+  }
 });

@@ -6,8 +6,10 @@ import {
   onMenu,
   onSettingsChanged,
   onTskCheckRequested,
+  openDocs,
   reportMenuState,
   setWindowTitle,
+  zoom,
 } from "../api/client";
 import type { StatusChange, TaskRow } from "../api/types";
 import { statusOf } from "../board/optimistic";
@@ -19,7 +21,7 @@ import type { Handler, Handlers } from "../keys/useKeymap";
 import { useKeymap } from "../keys/useKeymap";
 import { menuAccelerators, runMenuItem } from "../menu";
 import type { DeckState } from "../state/store";
-import { useDeck } from "../state/store";
+import { failure, useDeck } from "../state/store";
 import { AssignDialog } from "./AssignDialog";
 import { RenameProjectDialog } from "./RenameProjectDialog";
 import { Board } from "./Board";
@@ -123,6 +125,16 @@ function opening(open: (value: boolean) => void): () => void {
 /** Opens the settings window, or brings it to the front. */
 function openSettings() {
   api.openSettings().catch((e: string) => useDeck.setState({ error: errorMessage(e) }));
+}
+
+/** Zooms the window; a failure goes to the alert. */
+function zoomWindow(direction: "in" | "out" | "reset") {
+  zoom(direction).catch((e: string) => useDeck.setState(failure("Zoom couldn't be changed", errorMessage(e))));
+}
+
+/** Opens tsk's documentation; a failure goes to the alert. */
+function showDocs() {
+  openDocs().catch((e: string) => useDeck.setState(failure("Documentation couldn't be opened", errorMessage(e))));
 }
 
 /** Subscribes to an event from another window for as long as the component is mounted. */
@@ -277,6 +289,7 @@ export function Shell() {
     setCapturing(false);
     setAssigning(false);
     setPalette(false);
+    setRenaming(null);
   }, [ready]);
   const capture = opening(setCapturing);
 
@@ -323,6 +336,10 @@ export function Shell() {
     capture,
     palette: opening(setPalette),
     settings: openSettings,
+    "zoom.in": () => zoomWindow("in"),
+    "zoom.out": () => zoomWindow("out"),
+    "zoom.reset": () => zoomWindow("reset"),
+    "help.docs": showDocs,
     search: () => setSearchFocus((n) => n + 1),
     undo: () => void state().undoLast(),
     // The drawer takes the task pane's place, so opening it closes the open task.

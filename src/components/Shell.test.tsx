@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -7,11 +7,13 @@ import {
   onMenu,
   onSettingsChanged,
   onTskCheckRequested,
+  openDocs,
   reportMenuState,
   setWindowTitle,
   showAlert,
   showPullDown,
   showTaskMenu,
+  zoom,
 } from "../api/client";
 import type { TaskRow } from "../api/types";
 import { useDeck } from "../state/store";
@@ -37,6 +39,8 @@ vi.mock("../api/client", async (importOriginal) => {
       relocateTsk: vi.fn(),
       openSettings: vi.fn(),
     },
+    zoom: vi.fn(),
+    openDocs: vi.fn(),
     onBoardChanged: vi.fn(),
     onSettingsChanged: vi.fn(),
     onTskCheckRequested: vi.fn(),
@@ -76,6 +80,8 @@ beforeEach(() => {
   useDeck.setState(useDeck.getInitialState(), true);
   vi.mocked(api.relocateTsk).mockResolvedValue();
   vi.mocked(api.openSettings).mockResolvedValue();
+  vi.mocked(zoom).mockResolvedValue();
+  vi.mocked(openDocs).mockResolvedValue();
   vi.mocked(reportMenuState).mockResolvedValue();
   vi.mocked(showTaskMenu).mockResolvedValue();
   vi.mocked(showPullDown).mockResolvedValue();
@@ -431,9 +437,9 @@ describe("window chrome", () => {
     await mountWith([row({ number: 3, status: "started" })]);
     const group = screen.getByRole("combobox", { name: "Group By" });
     const sort = screen.getByRole("combobox", { name: "Sort By" });
-    expect(within(group).getByRole("option", { name: "None" })).toHaveValue("none");
-    expect(within(sort).getByRole("option", { name: "Most Recent" })).toHaveValue("recent");
-    expect(within(sort).getByRole("option", { name: "Title" })).toHaveValue("title");
+    expect(within(group).getByRole("option", { name: "No Grouping" })).toHaveValue("none");
+    expect(within(sort).getByRole("option", { name: "Sort by Most Recent" })).toHaveValue("recent");
+    expect(within(sort).getByRole("option", { name: "Sort by Title" })).toHaveValue("title");
   });
 
   it("titles the board sections in title case", async () => {
@@ -732,12 +738,12 @@ describe("done drawer", () => {
     vi.mocked(api.listScope).mockResolvedValue([row({ number: 5, title: "Five" }), row({ number: 6, title: "Six" })]);
     subscriber(onMenu)("done-drawer");
     const drawer = await screen.findByRole("complementary", { name: "Done tasks" });
-    const lists = await within(drawer).findAllByRole("listbox", { name: "Done tasks" });
-    const options = within(lists[0]).getAllByRole("option");
-    expect(options[0]).toHaveAttribute("aria-selected", "true");
+    const lists = await within(drawer).findAllByRole("list", { name: "Done tasks" });
+    const options = within(lists[0]).getAllByRole("listitem");
+    expect(options[0]).toHaveAttribute("tabindex", "0");
     options[0].focus();
     await user.keyboard("{ArrowDown}");
-    expect(options[1]).toHaveAttribute("aria-selected", "true");
+    expect(options[1]).toHaveAttribute("tabindex", "0");
     expect(options[1]).toHaveFocus();
     await user.keyboard("{ArrowUp}");
     expect(options[0]).toHaveFocus();
@@ -890,13 +896,13 @@ describe("Escape in the open task's text fields", () => {
     expect(screen.getByRole("textbox", { name: "Reply" })).toHaveValue("half a thought");
   });
 
-  it("keeps the block card when leaving one of its fields", async () => {
+  it("closes the block card from one of its fields and keeps the task open", async () => {
     await mountWith([row({ number: 6, status: "started" })]);
     await userEvent.keyboard("{Control>}b{/Control}");
     const card = await screen.findByRole("form", { name: "Block" });
     await userEvent.type(within(card).getByRole("textbox", { name: "Why" }), "Need a key{Escape}");
+    expect(screen.queryByRole("form", { name: "Block" })).not.toBeInTheDocument();
     expect(useDeck.getState().openTask).toBe(6);
-    expect(within(card).getByRole("textbox", { name: "Why" })).toHaveValue("Need a key");
   });
 });
 
@@ -938,6 +944,52 @@ describe("moving to another task", () => {
   });
 });
 
+describe("zoom and help actions", () => {
+  const cases: [string, "in" | "out" | "reset"][] = [
+    ["zoom.in", "in"],
+    ["zoom.out", "out"],
+    ["zoom.reset", "reset"],
+  ];
+
+  it.each(cases)("%s zooms the window %s", async (id, direction) => {
+    await mountWith([row({ number: 3, status: "started" })]);
+    useDeck.setState({
+      settings: { ...useDeck.getState().settings, keymap: { [id]: ["ctrl+alt+9"] } },
+    });
+    await userEvent.keyboard("{Control>}{Alt>}9{/Alt}{/Control}");
+    await vi.waitFor(() => expect(zoom).toHaveBeenCalledWith(direction));
+  });
+
+  it("help.docs opens the documentation", async () => {
+    await mountWith([row({ number: 3, status: "started" })]);
+    useDeck.setState({
+      settings: { ...useDeck.getState().settings, keymap: { "help.docs": ["ctrl+alt+9"] } },
+    });
+    await userEvent.keyboard("{Control>}{Alt>}9{/Alt}{/Control}");
+    await vi.waitFor(() => expect(openDocs).toHaveBeenCalledTimes(1));
+  });
+
+  it("shows a failed zoom through the store's failure path", async () => {
+    vi.mocked(zoom).mockRejectedValue("zoom is unavailable");
+    await mountWith([row({ number: 3, status: "started" })]);
+    useDeck.setState({
+      settings: { ...useDeck.getState().settings, keymap: { "zoom.in": ["ctrl+alt+9"] } },
+    });
+    await userEvent.keyboard("{Control>}{Alt>}9{/Alt}{/Control}");
+    await vi.waitFor(() => expect(showAlert).toHaveBeenCalledWith("Zoom couldn't be changed", "zoom is unavailable"));
+  });
+
+  it("shows a failed docs open through the store's failure path", async () => {
+    vi.mocked(openDocs).mockRejectedValue("no browser");
+    await mountWith([row({ number: 3, status: "started" })]);
+    useDeck.setState({
+      settings: { ...useDeck.getState().settings, keymap: { "help.docs": ["ctrl+alt+9"] } },
+    });
+    await userEvent.keyboard("{Control>}{Alt>}9{/Alt}{/Control}");
+    await vi.waitFor(() => expect(showAlert).toHaveBeenCalledWith("Documentation couldn't be opened", "no browser"));
+  });
+});
+
 describe("Escape order", () => {
   it("closes an open block card before the task", async () => {
     await mountWith([row({ number: 6, status: "started" })]);
@@ -947,6 +999,7 @@ describe("Escape order", () => {
     await vi.waitFor(() => expect(pane).toContainElement(document.activeElement as HTMLElement));
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("form", { name: "Block" })).not.toBeInTheDocument();
+    expect(pane).toHaveFocus();
     expect(useDeck.getState().openTask).toBe(6);
     await userEvent.keyboard("{Escape}");
     expect(useDeck.getState().openTask).toBeNull();
@@ -991,6 +1044,19 @@ describe("project names", () => {
     );
     expect(screen.queryByRole("dialog", { name: "Rename Project" })).not.toBeInTheDocument();
     expect(within(sidebar).getByText("Alpha")).toBeInTheDocument();
+  });
+
+  it("closes the rename sheet when the board gives way to the tsk-missing screen", async () => {
+    await mountWith([row({ number: 3, status: "started", project: path })]);
+    const sidebar = screen.getByRole("navigation", { name: "Views" });
+    fireEvent.contextMenu(within(sidebar).getByText("wp-content"));
+    subscriber(onMenu)("pane-rename-project");
+    await screen.findByRole("dialog", { name: "Rename Project" });
+    act(() => useDeck.setState({ tskError: { kind: "notFound" } as never }));
+    await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Rename Project" })).not.toBeInTheDocument());
+    act(() => useDeck.setState({ tskError: null }));
+    await screen.findByRole("navigation", { name: "Views" });
+    expect(screen.queryByRole("dialog", { name: "Rename Project" })).not.toBeInTheDocument();
   });
 
   it("starts the field with the project's current name", async () => {

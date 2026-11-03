@@ -1,8 +1,19 @@
+import type { Group, Sort } from "../api/types";
 import { CHOICE_LABELS, groupChoices, sortChoices } from "../board/choices";
 import { useDeck } from "../state/store";
 import { SearchBar } from "./SearchBar";
 import { SymbolIcon } from "./SymbolIcon";
 import { PopUp } from "./PopUp";
+
+/** What a grouping choice reads as in the Group By pop-up. */
+function groupLabel(group: Group): string {
+  return group === "none" ? "No Grouping" : `Group by ${CHOICE_LABELS[group]}`;
+}
+
+/** What a sorting choice reads as in the Sort By pop-up. */
+function sortLabel(sort: Sort): string {
+  return `Sort by ${CHOICE_LABELS[sort]}`;
+}
 
 interface ToolbarProps {
   /** The current scope's name, shown as the window title and in the search placeholder. */
@@ -49,7 +60,7 @@ export function Toolbar(props: ToolbarProps) {
         >
           {groupChoices(scope).map((g) => (
             <option key={g} value={g}>
-              {CHOICE_LABELS[g]}
+              {groupLabel(g)}
             </option>
           ))}
         </PopUp>
@@ -62,7 +73,7 @@ export function Toolbar(props: ToolbarProps) {
         >
           {sortChoices(scope).map((s) => (
             <option key={s} value={s}>
-              {CHOICE_LABELS[s]}
+              {sortLabel(s)}
             </option>
           ))}
         </PopUp>

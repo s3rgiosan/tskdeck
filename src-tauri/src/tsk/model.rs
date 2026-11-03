@@ -12,6 +12,9 @@ pub enum Status {
     Blocked,
     Review,
     Done,
+    /// A status a newer `tsk` reports.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -20,6 +23,9 @@ pub enum CheckState {
     Open,
     Passed,
     Failed,
+    /// A check state a newer `tsk` reports.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -43,12 +49,16 @@ pub struct Reply {
 pub struct Block {
     pub why: Option<String>,
     pub needs: Option<String>,
+    #[serde(default)]
     pub options: Vec<String>,
     pub on: String,
     pub by: String,
     pub at: Timestamp,
+    #[serde(default)]
     pub edited: bool,
+    #[serde(default)]
     pub replies: Vec<Reply>,
+    #[serde(default)]
     pub answered: bool,
     #[serde(default)]
     pub closed_at: Option<Timestamp>,
@@ -64,15 +74,20 @@ pub struct Check {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Review {
+    #[serde(default)]
     pub round: u32,
     pub done: Option<String>,
+    #[serde(default)]
     pub checks: Vec<Check>,
     pub next: Option<String>,
     pub on: String,
     pub by: String,
     pub at: Timestamp,
+    #[serde(default)]
     pub edited: bool,
+    #[serde(default)]
     pub feedback: Vec<Reply>,
+    #[serde(default)]
     pub answered: bool,
     #[serde(default)]
     pub closed_at: Option<Timestamp>,
@@ -174,6 +189,43 @@ mod tests {
             vec![CheckState::Open, CheckState::Passed, CheckState::Failed]
         );
         assert_eq!(d[0].past_reviews.len(), 1);
+    }
+
+    #[test]
+    fn an_unknown_status_and_check_state_parse_as_unknown() {
+        let row: TaskRow = serde_json::from_str(
+            r#"{"id":"x","number":1,"title":"T","status":"paused","project":null,"thread":null,
+                "assignee":null,"assignee_kind":null,"base":null,"after":[],"before":[],
+                "review":{"round":1,"done":null,"checks":[{"text":"c","state":"skipped"}],
+                "next":null,"on":"human","by":"bot","at":[1,0],"edited":false,
+                "feedback":[],"answered":false}}"#,
+        )
+        .unwrap();
+        assert_eq!(row.status, Status::Unknown);
+        assert_eq!(row.review.unwrap().checks[0].state, CheckState::Unknown);
+        assert_eq!(
+            serde_json::to_string(&Status::Unknown).unwrap(),
+            r#""unknown""#
+        );
+    }
+
+    #[test]
+    fn a_block_and_review_without_optional_fields_parse() {
+        let row: TaskRow = serde_json::from_str(
+            r#"{"id":"x","number":1,"title":"T","status":"blocked","project":null,"thread":null,
+                "assignee":null,"assignee_kind":null,"base":null,"after":[],"before":[],
+                "block":{"on":"human","by":"bot","at":[1,0]}}"#,
+        )
+        .unwrap();
+        let block = row.block.unwrap();
+        assert!(block.options.is_empty() && block.replies.is_empty());
+        assert!(!block.edited && !block.answered);
+
+        let review: Review =
+            serde_json::from_str(r#"{"on":"human","by":"bot","at":[1,0]}"#).unwrap();
+        assert!(review.checks.is_empty() && review.feedback.is_empty());
+        assert!(!review.edited && !review.answered);
+        assert_eq!(review.round, 0);
     }
 
     #[test]

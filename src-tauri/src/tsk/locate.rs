@@ -8,6 +8,9 @@ use std::time::Duration;
 #[cfg(unix)]
 const LOGIN_SHELL_TIMEOUT: Duration = Duration::from_secs(2);
 
+/// The binary's file name: Windows finds `tsk` through its `.exe` extension.
+const TSK_FILE: &str = if cfg!(windows) { "tsk.exe" } else { "tsk" };
+
 /// First existing of: the user's setting, `tsk` on `login_path`, then each candidate.
 pub fn locate(
     setting: Option<&Path>,
@@ -28,15 +31,17 @@ pub fn locate(
 pub fn default_candidates(home: Option<&Path>, local_app_data: Option<&Path>) -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Some(home) = home {
-        out.push(home.join(".local").join("bin").join("tsk"));
+        out.push(home.join(".local").join("bin").join(TSK_FILE));
     }
-    out.push(PathBuf::from("/opt/homebrew/bin/tsk"));
-    out.push(PathBuf::from("/usr/local/bin/tsk"));
-    out.push(PathBuf::from("/home/linuxbrew/.linuxbrew/bin/tsk"));
-    if cfg!(windows)
-        && let Some(base) = local_app_data
-    {
-        out.push(base.join("Programs").join("tsk").join("bin").join("tsk.exe"));
+    if cfg!(windows) {
+        if let Some(base) = local_app_data {
+            let bin_dir = base.join("Programs").join("tsk").join("bin");
+            out.push(bin_dir.join("tsk.exe"));
+        }
+    } else {
+        out.push(PathBuf::from("/opt/homebrew/bin/tsk"));
+        out.push(PathBuf::from("/usr/local/bin/tsk"));
+        out.push(PathBuf::from("/home/linuxbrew/.linuxbrew/bin/tsk"));
     }
     out
 }
@@ -110,9 +115,6 @@ mod tests {
     use super::*;
     use std::fs;
 
-    /// The binary's file name: Windows finds `tsk` through its `.exe` extension.
-    const TSK_FILE: &str = if cfg!(windows) { "tsk.exe" } else { "tsk" };
-
     fn make_tsk(dir: &Path) -> PathBuf {
         fs::create_dir_all(dir).unwrap();
         let file = dir.join(TSK_FILE);
@@ -161,6 +163,20 @@ mod tests {
         assert!(list.contains(&PathBuf::from("/opt/homebrew/bin/tsk")));
         assert!(list.contains(&PathBuf::from("/usr/local/bin/tsk")));
         assert!(list.contains(&PathBuf::from("/home/linuxbrew/.linuxbrew/bin/tsk")));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn default_candidates_use_exe_names_and_skip_unix_locations() {
+        let list = default_candidates(
+            Some(Path::new(r"C:\Users\u")),
+            Some(Path::new(r"C:\Users\u\AppData\Local")),
+        );
+        let local_bin = Path::new(r"C:\Users\u").join(".local").join("bin");
+        assert_eq!(list[0], local_bin.join("tsk.exe"));
+        assert!(list.iter().any(|p| p.ends_with("Programs/tsk/bin/tsk.exe")));
+        let unix_roots = ["/opt", "/usr", "/home"];
+        assert!(list.iter().all(|p| !unix_roots.iter().any(|r| p.starts_with(r))));
     }
 
     #[cfg(unix)]

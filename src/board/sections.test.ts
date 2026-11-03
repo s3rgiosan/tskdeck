@@ -26,6 +26,11 @@ describe("sectionOf", () => {
     expect(sectionOf(row({ status: "open" }), new Set())).toBe("onDeck");
     expect(sectionOf(row({ status: "done" }), new Set())).toBe("done");
   });
+  it("puts a task with an unknown status in the inbox", () => {
+    const board = buildBoard([row({ number: 1, status: "unknown" }), row({ number: 2, status: "ready" })], new Set());
+    expect(board.inbox.map((r) => r.number)).toEqual([1]);
+    expect(board.ready.map((r) => r.number)).toEqual([2]);
+  });
 });
 
 describe("buildBoard", () => {

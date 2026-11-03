@@ -8,4 +8,5 @@ export const STATUS_LABELS: Record<Status, string> = {
   blocked: "Blocked",
   review: "In Review",
   done: "Done",
+  unknown: "Unknown",
 };

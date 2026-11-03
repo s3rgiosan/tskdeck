@@ -1,14 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TaskDetail } from "../api/types";
 import { useDeck } from "../state/store";
-import { leaveFieldOnEscape, WaitsOn } from "./BlockCard";
-
-function lines(text: string): string[] {
-  return text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l !== "");
-}
+import { closeOnEscape, WaitsOn } from "./BlockCard";
+import { lines } from "./lines";
 
 /** Form that sends a task to review. Reviews wait on a person or an agent, never a task. */
 export function ReviewCard(props: { task: TaskDetail; onClose: () => void }) {
@@ -18,31 +12,40 @@ export function ReviewCard(props: { task: TaskDetail; onClose: () => void }) {
   const [checks, setChecks] = useState((task.review?.checks ?? []).map((c) => c.text).join("\n"));
   const [next, setNext] = useState(task.review?.next ?? "");
   const [on, setOn] = useState<string | null>(null);
+  const form = useRef<HTMLFormElement>(null);
 
-  function submit() {
+  useEffect(() => {
+    form.current?.querySelector<HTMLElement>("textarea, input")?.focus();
+  }, []);
+
+  /** Writes the review request and closes the card once the write succeeded. */
+  async function submit() {
+    const trimmedDone = done.trim();
+    const trimmedNext = next.trim();
     const change = {
       kind: "review" as const,
-      done: done.trim() === "" ? null : done.trim(),
+      done: trimmedDone === "" ? null : trimmedDone,
       checks: lines(checks),
-      next: next.trim() === "" ? null : next.trim(),
+      next: trimmedNext === "" ? null : trimmedNext,
       on,
     };
-    props.onClose();
-    void run(
+    const written = await run(
       { kind: "status", number: task.number, change },
       { kind: "status", number: task.number, from: task.status, to: "review", dispatched: false },
       "Request Review",
     );
+    if (written) props.onClose();
   }
 
   return (
     <form
+      ref={form}
       className="card group-box"
       aria-label="Request Review"
-      onKeyDown={leaveFieldOnEscape}
+      onKeyDown={closeOnEscape(props.onClose)}
       onSubmit={(e) => {
         e.preventDefault();
-        submit();
+        void submit();
       }}
     >
       <h3 className="group-box-title">Request Review</h3>

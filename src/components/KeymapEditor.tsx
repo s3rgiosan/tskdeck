@@ -5,6 +5,7 @@ import { formatBinding, formatBindings } from "../keys/format";
 import type { Keymap } from "../keys/keymap";
 import { conflictsFor, defaultKeymap, isMacPlatform, matches, normalizeEvent, RESERVED, resolveKeymap } from "../keys/keymap";
 import { useDeck } from "../state/store";
+import { Modal } from "./Modal";
 
 const LONE_MODIFIERS = ["control", "shift", "alt", "meta", "altgraph"];
 
@@ -35,6 +36,7 @@ export function KeymapEditor(props: { isMac?: boolean }) {
   const [recording, setRecording] = useState<ActionId | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  const [confirmingReset, setConfirmingReset] = useState(false);
   const keymap = resolveKeymap(settings.keymap, isMac);
 
   function save(next: Keymap) {
@@ -86,10 +88,32 @@ export function KeymapEditor(props: { isMac?: boolean }) {
     <section className="keymap-editor" aria-label="Keyboard shortcuts">
       <div className="keymap-head">
         <p>Choose Record, then press the new key combination.</p>
-        <button type="button" onClick={() => save(defaultKeymap(isMac))}>
+        <button type="button" onClick={() => setConfirmingReset(true)}>
           Reset All
         </button>
       </div>
+      {confirmingReset && (
+        <Modal title="Reset All Shortcuts" errors={false} onClose={() => setConfirmingReset(false)}>
+          <div className="sheet-form">
+            <p className="sheet-help">Every shortcut returns to its original keys.</p>
+            <div className="sheet-actions">
+              <button type="button" onClick={() => setConfirmingReset(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="is-destructive"
+                onClick={() => {
+                  setConfirmingReset(false);
+                  save(defaultKeymap(isMac));
+                }}
+              >
+                Reset All
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {recording !== null && <p role="status">Press a key combination, or Esc to cancel.</p>}
       {refusal !== null && <p role="alert">{refusal}</p>}
       {pending !== null && (
@@ -115,14 +139,16 @@ export function KeymapEditor(props: { isMac?: boolean }) {
             <kbd>{keymap[id].length > 0 ? formatBindings(keymap[id], isMac) : "Unbound"}</kbd>
             <button
               type="button"
-              aria-label={`Record ${label}`}
+              className={recording === id ? "is-recording" : undefined}
+              aria-label={recording === id ? `Press Keys… for ${label}` : `Record ${label}`}
+              aria-pressed={recording === id}
               onClick={() => {
                 setRefusal(null);
                 setPending(null);
                 setRecording(id);
               }}
             >
-              Record
+              {recording === id ? "Press Keys…" : "Record"}
             </button>
             {settings.keymap[id] !== undefined && (
               <button

@@ -9,27 +9,21 @@ const KEY_LABELS: Record<string, string> = {
   arrowright: "→",
 };
 
-function modifierLabel(modifier: string, isMac: boolean): string {
-  switch (modifier) {
-    case "mod":
-      return isMac ? "⌘" : "Ctrl";
-    case "meta":
-      return isMac ? "⌘" : "Win";
-    case "ctrl":
-      return "Ctrl";
-    case "alt":
-      return isMac ? "⌥" : "Alt";
-    case "shift":
-      return "Shift";
-    default:
-      return modifier;
-  }
-}
+/** Modifiers off macOS, in the order they are written, with `mod` standing for Ctrl. */
+const OTHER_MODIFIERS: [string, string][] = [
+  ["ctrl", "Ctrl"],
+  ["alt", "Alt"],
+  ["shift", "Shift"],
+  ["meta", "Win"],
+];
 
+/** Keys macOS shows as glyphs in menus and shortcut lists. */
 const MAC_KEY_LABELS: Record<string, string> = {
-  enter: "Return",
-  backspace: "Delete",
-  delete: "Delete",
+  enter: "↩",
+  escape: "⎋",
+  tab: "⇥",
+  backspace: "⌫",
+  delete: "⌦",
 };
 
 const MAC_MODIFIERS: [string, string][] = [
@@ -58,12 +52,18 @@ function formatMacBinding(binding: string): string {
   return glyphs.join("") + keyLabel;
 }
 
+/** A binding as read off macOS: modifiers in the order Ctrl, Alt, Shift, Win, joined by `+`, such as `Ctrl+Shift+D`. */
+function formatOtherBinding(binding: string): string {
+  const { modifiers, key } = splitBinding(binding);
+  const held = new Set(modifiers.map((m) => (m === "mod" ? "ctrl" : m)));
+  const names = OTHER_MODIFIERS.filter(([name]) => held.has(name)).map(([, label]) => label);
+  const keyLabel = KEY_LABELS[key] ?? (key.length === 1 ? key.toUpperCase() : key);
+  return [...names, keyLabel].join("+");
+}
+
 /** A binding as a person reads it, such as `Ctrl+D` or, on macOS, `⌃D`. */
 export function formatBinding(binding: string, isMac: boolean): string {
-  if (isMac) return formatMacBinding(binding);
-  const { modifiers, key } = splitBinding(binding);
-  const keyLabel = KEY_LABELS[key] ?? (key.length === 1 ? key.toUpperCase() : key);
-  return [...modifiers.map((m) => modifierLabel(m, isMac)), keyLabel].join("+");
+  return isMac ? formatMacBinding(binding) : formatOtherBinding(binding);
 }
 
 export function formatBindings(bindings: string[], isMac: boolean): string {

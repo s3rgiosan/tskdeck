@@ -14,6 +14,7 @@ interface SectionProps {
   rows: TaskRow[];
   cursorNumber: number | null;
   marks: number[];
+  markMode: boolean;
   focused: boolean;
   groupOf: GroupOf;
   onPick: (row: TaskRow) => void;
@@ -33,8 +34,15 @@ function showRowMenu(e: React.MouseEvent, number: number) {
   showTaskMenu().catch(() => null);
 }
 
-function RowView(props: { row: TaskRow; isCursor: boolean; isMarked: boolean; focused: boolean; onPick: () => void }) {
-  const { row, isCursor, isMarked, focused, onPick } = props;
+function RowView(props: {
+  row: TaskRow;
+  isCursor: boolean;
+  isMarked: boolean;
+  markMode: boolean;
+  focused: boolean;
+  onPick: () => void;
+}) {
+  const { row, isCursor, isMarked, markMode, focused, onPick } = props;
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (isCursor) ref.current?.scrollIntoView?.({ block: "nearest" });
@@ -46,11 +54,12 @@ function RowView(props: { row: TaskRow; isCursor: boolean; isMarked: boolean; fo
       ref={ref}
       id={rowId(row.number)}
       role="option"
-      aria-selected={isCursor}
+      aria-selected={markMode ? isMarked : isCursor}
       className={`row${isCursor ? " is-cursor" : ""}${isCursor && focused ? " is-focused" : ""}${isMarked ? " is-marked" : ""}`}
       onClick={onPick}
       onContextMenu={(e) => showRowMenu(e, row.number)}
     >
+      {markMode && <span className={isMarked ? "row-check is-checked" : "row-check"} aria-hidden="true" />}
       <span className="row-number">T{row.number}</span>
       <span className={`row-status status-${row.status}`} role="img" aria-label={status} title={status} />
       <span className="row-title">{row.title}</span>
@@ -125,7 +134,7 @@ function groupsOf(title: string, rows: TaskRow[], inbox: TaskRow[], groupOf: Gro
 
 /** `inbox` rows follow `rows` in an "Inbox" group. The headings are visual; the groups carry the names. */
 function Section(props: SectionProps & { inbox?: TaskRow[] }) {
-  const { title, rows, inbox = [], groupOf, cursorNumber, marks, focused, onPick } = props;
+  const { title, rows, inbox = [], groupOf, cursorNumber, marks, markMode, focused, onPick } = props;
   if (rows.length + inbox.length === 0) return null;
   return (
     <div className="section" role="presentation">
@@ -152,6 +161,7 @@ function Section(props: SectionProps & { inbox?: TaskRow[] }) {
               row={row}
               isCursor={row.number === cursorNumber}
               isMarked={marks.includes(row.number)}
+              markMode={markMode}
               focused={focused}
               onPick={() => onPick(row)}
             />
@@ -171,6 +181,7 @@ export function Board(props: { onNewTask: () => void }) {
   const loaded = useDeck((s) => s.loaded);
   const cursor = useDeck((s) => s.cursor);
   const marks = useDeck((s) => s.marks);
+  const markMode = useDeck((s) => s.markMode);
   const focus = useDeck((s) => s.focus);
   const modalOpen = useDeck((s) => s.modalOpen);
   const open = useDeck((s) => s.open);
@@ -204,7 +215,7 @@ export function Board(props: { onNewTask: () => void }) {
 
   const cursorListed = cursor !== null && order.some((r) => r.number === cursor);
 
-  const shared = { cursorNumber: cursor, marks, focused: focus === "board", groupOf, onPick: pick };
+  const shared = { cursorNumber: cursor, marks, markMode, focused: focus === "board", groupOf, onPick: pick };
 
   return (
     <div className="board">
@@ -233,6 +244,7 @@ export function Board(props: { onNewTask: () => void }) {
           className="board-list"
           role="listbox"
           aria-label="Tasks"
+          aria-multiselectable={markMode ? true : undefined}
           tabIndex={0}
           aria-activedescendant={cursor !== null && cursorListed ? rowId(cursor) : undefined}
           onFocus={(e) => {

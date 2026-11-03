@@ -48,6 +48,10 @@ export const ACTIONS = [
   { id: "review.sendBack", label: "Send Back" },
   { id: "settings", label: "Settings…" },
   { id: "sidebar.toggle", label: "Show or Hide Sidebar" },
+  { id: "zoom.in", label: "Zoom In" },
+  { id: "zoom.out", label: "Zoom Out" },
+  { id: "zoom.reset", label: "Actual Size" },
+  { id: "help.docs", label: "tsk Documentation" },
 ] as const;
 
 export type ActionId = (typeof ACTIONS)[number]["id"];

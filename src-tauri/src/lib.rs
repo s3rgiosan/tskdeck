@@ -80,6 +80,8 @@ pub fn run() {
             menu::menu_state,
             menu::show_task_menu,
             menu::show_pull_down,
+            menu::zoom,
+            menu::open_docs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

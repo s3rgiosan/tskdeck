@@ -1,6 +1,7 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { showPullDown } from "../api/client";
 import { useDeck } from "../state/store";
 import { row } from "../test/fixtures";
 import { Sidebar } from "./Sidebar";
@@ -8,6 +9,7 @@ import { Sidebar } from "./Sidebar";
 vi.mock("../api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/client")>()),
   onBoardChanged: vi.fn(),
+  showPullDown: vi.fn(),
 }));
 
 function rows() {
@@ -22,6 +24,7 @@ let selectScope: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   useDeck.setState(useDeck.getInitialState(), true);
   selectScope = vi.fn();
+  vi.mocked(showPullDown).mockClear();
   useDeck.setState({ allRows: rows(), selectScope: selectScope as never, focus: "board" });
 });
 afterEach(cleanup);
@@ -113,5 +116,29 @@ describe("Sidebar", () => {
     await user.keyboard("t");
     await user.keyboard("lau{ArrowDown}{ArrowDown}{Enter}");
     expect(selectScope).toHaveBeenCalledWith({ kind: "thread", name: "launch" });
+  });
+
+  it("opens the project menu at the highlighted project from the keyboard", async () => {
+    const user = userEvent.setup();
+    vi.mocked(showPullDown).mockResolvedValue();
+    useDeck.setState({ focus: "sidebar" });
+    render(<Sidebar onRename={() => {}} />);
+    await user.keyboard("jj");
+    const projects = screen.getByRole("listbox", { name: "Projects" });
+    await vi.waitFor(() => expect(projects).toHaveFocus());
+    const item = within(projects).getAllByRole("option")[0];
+    item.getBoundingClientRect = () => ({ left: 12, bottom: 80, top: 60, right: 100, width: 88, height: 20, x: 12, y: 60, toJSON: () => ({}) });
+    fireEvent.contextMenu(projects);
+    expect(showPullDown).toHaveBeenCalledWith([{ id: "pane-rename-project", title: "Rename…" }], 12, 80);
+  });
+
+  it("offers no project menu from the keyboard on a view", async () => {
+    vi.mocked(showPullDown).mockResolvedValue();
+    useDeck.setState({ focus: "sidebar" });
+    render(<Sidebar onRename={() => {}} />);
+    const views = screen.getByRole("listbox", { name: "Views" });
+    await vi.waitFor(() => expect(views).toHaveFocus());
+    fireEvent.contextMenu(views);
+    expect(showPullDown).not.toHaveBeenCalled();
   });
 });

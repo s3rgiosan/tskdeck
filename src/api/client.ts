@@ -155,6 +155,16 @@ export function reduceTransparency(): Promise<boolean> {
   return invoke<boolean>("reduce_transparency");
 }
 
+/** Zooms the window's content in, out, or back to its actual size. Rejects outside a Tauri window. */
+export function zoom(direction: "in" | "out" | "reset"): Promise<void> {
+  return invoke<void>("zoom", { direction });
+}
+
+/** Opens tsk's documentation. Rejects outside a Tauri window. */
+export function openDocs(): Promise<void> {
+  return invoke<void>("open_docs");
+}
+
 export function errorMessage(e: TskError | string): string {
   if (typeof e === "string") {
     return e;
@@ -162,8 +172,8 @@ export function errorMessage(e: TskError | string): string {
   switch (e.kind) {
     case "notFound":
       return "tsk was not found";
-    case "store":
-      return "tsk could not save; the board was re-read";
+    case "timeout":
+      return `tsk didn't finish within ${e.seconds} seconds.`;
     default:
       return e.message;
   }

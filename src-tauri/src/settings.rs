@@ -4,15 +4,17 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum OpenMode {
-    #[default]
-    Beside,
     Overlay,
+    #[default]
+    #[serde(other)]
+    Beside,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -27,7 +29,7 @@ pub struct Settings {
 }
 
 /// A missing file gives the defaults. An unreadable or invalid file is moved to
-/// `<name>.bad` and the defaults are returned.
+/// `<name>.<unix-seconds>.bad` and the defaults are returned.
 pub fn load(path: &Path) -> Settings {
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
@@ -49,7 +51,16 @@ pub fn save(path: &Path, settings: &Settings) -> io::Result<()> {
 }
 
 fn quarantine(path: &Path) -> Settings {
-    let _ = fs::rename(path, sibling(path, ".bad"));
+    let seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let mut target = sibling(path, &format!(".{seconds}.bad"));
+    let mut n = 1;
+    while target.exists() {
+        target = sibling(path, &format!(".{seconds}-{n}.bad"));
+        n += 1;
+    }
+    let _ = fs::rename(path, target);
     Settings::default()
 }
 
@@ -101,8 +112,46 @@ mod tests {
         let path = tmp.path().join("settings.json");
         std::fs::write(&path, "{").unwrap();
         assert_eq!(load(&path), Settings::default());
-        assert!(tmp.path().join("settings.json.bad").exists());
+        assert_eq!(bad_files(tmp.path()).len(), 1);
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn a_second_corrupt_file_keeps_the_first_quarantined_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("settings.json");
+        std::fs::write(&path, "{first").unwrap();
+        load(&path);
+        std::fs::write(&path, "{second").unwrap();
+        load(&path);
+        let mut contents: Vec<String> = bad_files(tmp.path())
+            .iter()
+            .map(|p| std::fs::read_to_string(p).unwrap())
+            .collect();
+        contents.sort();
+        assert_eq!(contents, vec!["{first", "{second"]);
+    }
+
+    #[test]
+    fn an_unknown_open_mode_falls_back_without_losing_other_settings() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("settings.json");
+        std::fs::write(&path, r#"{"openMode":"sideways","sidebarHidden":true}"#).unwrap();
+        let loaded = load(&path);
+        assert_eq!(loaded.open_mode, OpenMode::Beside);
+        assert!(loaded.sidebar_hidden);
+        assert!(bad_files(tmp.path()).is_empty());
+    }
+
+    fn bad_files(dir: &Path) -> Vec<PathBuf> {
+        std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| {
+                let name = p.file_name().unwrap().to_string_lossy();
+                name.starts_with("settings.json.") && name.ends_with(".bad")
+            })
+            .collect()
     }
 
     #[test]

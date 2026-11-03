@@ -59,6 +59,16 @@ pub fn zoom_after(current: f64, step: ZoomStep) -> f64 {
 #[derive(Default)]
 pub struct ZoomLevels(Mutex<HashMap<String, f64>>);
 
+/// The zoom step a direction name stands for: "in", "out" or "reset".
+pub fn parse_zoom_direction(direction: &str) -> Result<ZoomStep, String> {
+    match direction {
+        "in" => Ok(ZoomStep::In),
+        "out" => Ok(ZoomStep::Out),
+        "reset" => Ok(ZoomStep::Actual),
+        other => Err(format!("unknown zoom direction: {other}")),
+    }
+}
+
 /// Applies `step` to the focused window's page zoom.
 fn zoom_focused(app: &AppHandle, step: ZoomStep) {
     let Some(window) = app
@@ -68,6 +78,11 @@ fn zoom_focused(app: &AppHandle, step: ZoomStep) {
     else {
         return;
     };
+    zoom_window(app, &window, step);
+}
+
+/// Applies `step` to `window`'s page zoom.
+fn zoom_window(app: &AppHandle, window: &tauri::WebviewWindow, step: ZoomStep) {
     let Some(levels) = app.try_state::<ZoomLevels>() else {
         return;
     };
@@ -77,6 +92,26 @@ fn zoom_focused(app: &AppHandle, step: ZoomStep) {
     if window.set_zoom(next).is_ok() {
         levels.insert(window.label().to_string(), next);
     }
+}
+
+/// Zooms the calling window; `direction` is "in", "out" or "reset".
+#[tauri::command]
+pub fn zoom(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    direction: String,
+) -> Result<(), String> {
+    let step = parse_zoom_direction(&direction)?;
+    zoom_window(&app, &window, step);
+    Ok(())
+}
+
+/// Opens the documentation page, as the Help menu item does.
+#[tauri::command]
+pub fn open_docs(app: AppHandle) -> Result<(), String> {
+    app.opener()
+        .open_url(DOCS_URL, None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 /// The page tskdeck's Help menu opens.
@@ -614,7 +649,8 @@ mod macos {
             let Some(entry) = items.keyed.get(id) else {
                 continue;
             };
-            if applied.get(id) == Some(keys) {
+            let current = applied.get(id);
+            if current == Some(keys) {
                 continue;
             }
             let _ = entry.set_accelerator(keys.as_deref());
@@ -626,6 +662,15 @@ mod macos {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zoom_directions_parse_to_steps() {
+        assert_eq!(parse_zoom_direction("in"), Ok(ZoomStep::In));
+        assert_eq!(parse_zoom_direction("out"), Ok(ZoomStep::Out));
+        assert_eq!(parse_zoom_direction("reset"), Ok(ZoomStep::Actual));
+        assert!(parse_zoom_direction("sideways").is_err());
+        assert!(parse_zoom_direction("").is_err());
+    }
 
     #[test]
     fn text_editing_items_stay_with_the_focused_window() {

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, onMenu, showPullDown } from "../api/client";
@@ -72,6 +72,69 @@ describe("ThreadView", () => {
     expect(screen.getByRole("button", { name: "Answer" })).toHaveAttribute("title", "Answer (Ctrl+Enter)");
   });
 
+  describe("waits-on editor", () => {
+    const blocked = () => detail({ ...row({ number: 3, status: "blocked" }), block: blockOn("you") });
+    const view = (props: Partial<React.ComponentProps<typeof ThreadView>> = {}) => (
+      <ThreadView task={blocked()} draft="" onDraft={() => {}} onSubmit={() => {}} onEditWaits={() => {}} editingWaits {...props} />
+    );
+
+    it("cancels with the Cancel button and hands focus back to Change", async () => {
+      const user = userEvent.setup();
+      const onCancelWaits = vi.fn();
+      render(view({ onCancelWaits, onSaveWaits: vi.fn() }));
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(onCancelWaits).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("button", { name: "Change" })).toHaveFocus();
+    });
+
+    it("cancels with Escape without letting the key reach the task view", async () => {
+      const user = userEvent.setup();
+      const onCancelWaits = vi.fn();
+      const reached = vi.fn();
+      render(
+        <div onKeyDown={(e) => e.key === "Escape" && reached()}>{view({ onCancelWaits, onSaveWaits: vi.fn() })}</div>,
+      );
+      screen.getByRole("combobox", { name: "Waits on" }).focus();
+      await user.keyboard("{Escape}");
+      expect(onCancelWaits).toHaveBeenCalledTimes(1);
+      expect(reached).not.toHaveBeenCalled();
+    });
+
+    it("starts from the saved value each time the editor opens", async () => {
+      const user = userEvent.setup();
+      const props = { onCancelWaits: vi.fn(), onSaveWaits: vi.fn() };
+      const { rerender } = render(view(props));
+      await user.selectOptions(screen.getByRole("combobox", { name: "Waits on" }), "other");
+      await user.type(screen.getByRole("textbox", { name: "Who" }), "someone");
+      expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+      rerender(view({ ...props, editingWaits: false }));
+      rerender(view(props));
+      expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    });
+
+    it("renders repeated options and check texts without key warnings", () => {
+      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const task = detail({ ...row({ number: 3, status: "blocked" }), block: { ...blockOn("you"), options: ["Same", "Same"] } });
+      const review = { ...reviewOn("you"), checks: [{ text: "Twice", state: "open" as const }, { text: "Twice", state: "open" as const }] };
+      render(
+        <>
+          {view({ task })}
+          {view({ task: detail({ ...row({ number: 4, status: "review" }), review }), editingWaits: false })}
+        </>,
+      );
+      expect(screen.getAllByText("Same")).toHaveLength(2);
+      expect(screen.getAllByText("Twice")).toHaveLength(2);
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+  });
+
+  it("labels a check state tsk reported that tskdeck does not know", () => {
+    const review = { ...reviewOn("you"), checks: [{ text: "Odd", state: "unknown" as const }] };
+    render(<ThreadView task={detail({ ...row({ number: 3, status: "review" }), review })} draft="" onDraft={() => {}} onSubmit={() => {}} onEditWaits={() => {}} />);
+    expect(screen.getByText("Unknown")).toBeInTheDocument();
+  });
+
   it("shows checks read-only", () => {
     const review = { ...reviewOn("you"), checks: [{ text: "Looks right", state: "passed" as const }] };
     const task = detail({ ...row({ number: 3, status: "review" }), review });
@@ -111,6 +174,131 @@ describe("cards", () => {
   });
 });
 
+describe("card submission", () => {
+  const blocked = (task: ReturnType<typeof detail>, onClose: () => void) => <BlockCard task={task} onClose={onClose} />;
+
+  it("closes the block card once the change is written, sending trimmed values and each option once", async () => {
+    const user = userEvent.setup();
+    const run = vi.fn().mockResolvedValue(true);
+    useDeck.setState({ run });
+    const onClose = vi.fn();
+    render(blocked(detail(row({ number: 3, status: "started" })), onClose));
+    await user.type(screen.getByRole("textbox", { name: "Why" }), "  Needs a decision  ");
+    await user.type(screen.getByRole("textbox", { name: "Options, one per line" }), "Ship\n Hold \nShip\n\nHold");
+    await user.click(screen.getByRole("button", { name: "Block" }));
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(run.mock.calls[0][0]).toEqual({
+      kind: "status",
+      number: 3,
+      change: { kind: "blocked", why: "Needs a decision", needs: null, options: ["Ship", "Hold"], on: null },
+    });
+  });
+
+  it("keeps the block card open with its text when the change fails", async () => {
+    const user = userEvent.setup();
+    useDeck.setState({ run: vi.fn().mockResolvedValue(false) });
+    const onClose = vi.fn();
+    render(blocked(detail(row({ number: 3, status: "started" })), onClose));
+    await user.type(screen.getByRole("textbox", { name: "Why" }), "Typed reason");
+    await user.click(screen.getByRole("button", { name: "Block" }));
+    await vi.waitFor(() => expect(useDeck.getState().run).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Why" })).toHaveValue("Typed reason");
+  });
+
+  it("closes the review card once the change is written and sends each check once", async () => {
+    const user = userEvent.setup();
+    const run = vi.fn().mockResolvedValue(true);
+    useDeck.setState({ run });
+    const onClose = vi.fn();
+    render(<ReviewCard task={detail(row({ number: 4, status: "started" }))} onClose={onClose} />);
+    await user.type(screen.getByRole("textbox", { name: "Done" }), " All finished ");
+    await user.type(screen.getByRole("textbox", { name: "Checks, one per line" }), "Looks right\nLooks right");
+    await user.click(screen.getByRole("button", { name: "Request Review" }));
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(run.mock.calls[0][0]).toMatchObject({
+      change: { kind: "review", done: "All finished", checks: ["Looks right"], next: null },
+    });
+  });
+
+  it("keeps the review card open with its text when the change fails", async () => {
+    const user = userEvent.setup();
+    useDeck.setState({ run: vi.fn().mockResolvedValue(false) });
+    const onClose = vi.fn();
+    render(<ReviewCard task={detail(row({ number: 4, status: "started" }))} onClose={onClose} />);
+    await user.type(screen.getByRole("textbox", { name: "Done" }), "Typed summary");
+    await user.click(screen.getByRole("button", { name: "Request Review" }));
+    await vi.waitFor(() => expect(useDeck.getState().run).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Done" })).toHaveValue("Typed summary");
+  });
+});
+
+describe("cards in the pane", () => {
+  async function mount() {
+    open(detail(row({ number: 3, status: "started" })));
+    useDeck.setState({ focus: "task" });
+    const choose = listenToMenus();
+    render(<TaskPane />);
+    await act(async () => {});
+    return choose;
+  }
+
+  it.each([
+    ["pane-block", "Block", "Why"],
+    ["pane-review", "Request Review", "Done"],
+  ])("focuses the first field of the %s card and hands focus to the pane on Cancel", async (menu, form, field) => {
+    const user = userEvent.setup();
+    const choose = await mount();
+    act(() => choose(menu));
+    const card = await screen.findByRole("form", { name: form });
+    expect(within(card).getByRole("textbox", { name: field })).toHaveFocus();
+    await user.click(within(card).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("form", { name: form })).not.toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Task" })).toHaveFocus();
+  });
+
+  it("returns focus to the pane control that opened the card", async () => {
+    const user = userEvent.setup();
+    const choose = await mount();
+    const opener = screen.getByRole("button", { name: "Archive" });
+    opener.focus();
+    act(() => choose("pane-block"));
+    const card = await screen.findByRole("form", { name: "Block" });
+    expect(within(card).getByRole("textbox", { name: "Why" })).toHaveFocus();
+    await user.click(within(card).getByRole("button", { name: "Cancel" }));
+    expect(opener).toHaveFocus();
+  });
+
+  it("returns focus to the opener when Escape closes the card", async () => {
+    const user = userEvent.setup();
+    const choose = await mount();
+    const opener = screen.getByRole("button", { name: "Mark Done" });
+    opener.focus();
+    act(() => choose("pane-review"));
+    await screen.findByRole("form", { name: "Request Review" });
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("form", { name: "Request Review" })).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
+
+  it("closes the card on one Escape from any control inside it without the key reaching the task view", async () => {
+    const user = userEvent.setup();
+    const choose = await mount();
+    const reached = vi.fn();
+    document.addEventListener("keydown", (e) => e.key === "Escape" && reached());
+    act(() => choose("pane-block"));
+    const card = await screen.findByRole("form", { name: "Block" });
+    within(card).getByRole("button", { name: "Cancel" }).focus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("form", { name: "Block" })).not.toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Task" })).toHaveFocus();
+    expect(reached).not.toHaveBeenCalled();
+  });
+});
+
 describe("TaskPane", () => {
   it("saves a title on Enter and rolls back with the refusal message shown in the pane", async () => {
     const user = userEvent.setup();
@@ -126,6 +314,44 @@ describe("TaskPane", () => {
       "title is empty",
     );
     expect(screen.getByText("Old title")).toBeInTheDocument();
+  });
+
+  it("opens an inline field with Space as well as Enter", async () => {
+    const user = userEvent.setup();
+    open(detail({ number: 2, title: "Old title" }));
+    render(<TaskPane />);
+    screen.getByRole("button", { name: "Edit title: Old title" }).focus();
+    await user.keyboard(" ");
+    expect(screen.getByRole("textbox", { name: "Title" })).toHaveFocus();
+  });
+
+  it("returns focus to the edit button after Enter, Escape or a blur to nowhere", async () => {
+    const user = userEvent.setup();
+    open(detail({ number: 2, title: "Old title" }));
+    vi.mocked(api.editTask).mockResolvedValue();
+    render(<TaskPane />);
+    const edit = () => screen.getByRole("button", { name: /^Edit title:/ });
+
+    await user.click(edit());
+    await user.keyboard("{Enter}");
+    expect(edit()).toHaveFocus();
+
+    await user.click(edit());
+    await user.keyboard("{Escape}");
+    expect(edit()).toHaveFocus();
+
+    await user.click(edit());
+    act(() => screen.getByRole("textbox", { name: "Title" }).blur());
+    expect(edit()).toHaveFocus();
+  });
+
+  it("leaves focus where it went when a blur moves it to another field", async () => {
+    const user = userEvent.setup();
+    open(detail({ number: 2, title: "Old title" }));
+    render(<TaskPane />);
+    await user.click(screen.getByRole("button", { name: /^Edit title:/ }));
+    await user.click(screen.getByRole("combobox", { name: "Assignee" }));
+    expect(screen.getByRole("combobox", { name: "Assignee" })).toHaveFocus();
   });
 
   it("names the editable title and notes after what they edit", () => {
@@ -297,10 +523,84 @@ describe("TaskPane", () => {
     useDeck.setState({ allRows: [task, row({ number: 7, title: "Seven" })] });
     const choose = listenToMenus();
     render(<TaskPane />);
-    await user.click(within(screen.getByRole("group", { name: "Runs after" })).getByRole("button", { name: "Add Dependency…" }));
+    await user.click(within(screen.getByRole("group", { name: "Runs after" })).getByRole("button", { name: "Add Runs After" }));
     expect(vi.mocked(showPullDown).mock.calls[0][0]).toEqual([{ id: "pane-after-7", title: "T7 Seven" }]);
     choose("pane-after-7");
     expect(api.editTask).toHaveBeenCalledWith(2, { after: [7] });
+  });
+});
+
+describe("task properties", () => {
+  it("shows an Add… push button for an empty Runs after and a plus beside existing links", () => {
+    const task = detail({ ...row({ number: 2 }) });
+    open(task);
+    useDeck.setState({ allRows: [task, row({ number: 7, title: "Seven" })] });
+    const { unmount } = render(<TaskPane />);
+    const group = screen.getByRole("group", { name: "Runs after" });
+    expect(within(group).getByRole("button", { name: "Add Runs After" })).toHaveTextContent("Add…");
+    unmount();
+    const linked = detail({ ...row({ number: 2 }), after: [{ task: 7, done: false }] });
+    open(linked);
+    useDeck.setState({ allRows: [linked, row({ number: 7, title: "Seven" }), row({ number: 8, title: "Eight" })] });
+    render(<TaskPane />);
+    const again = screen.getByRole("group", { name: "Runs after" });
+    expect(within(again).getByRole("button", { name: "Add Dependency…" })).not.toHaveTextContent("Add…");
+  });
+
+  it("shows a status tskdeck does not know as Unknown, without offering it as a choice", () => {
+    open(detail({ ...row({ number: 2, status: "unknown" }) }));
+    render(<TaskPane />);
+    const status = screen.getByRole("combobox", { name: "Status" });
+    expect(status).toHaveDisplayValue("Unknown");
+    expect(within(status).getByRole("option", { name: "Unknown" })).toBeDisabled();
+  });
+
+  it("titles the ellipsis pull-down More while keeping its name", () => {
+    open(detail({ ...row({ number: 2 }) }));
+    render(<TaskPane />);
+    const more = screen.getByRole("button", { name: "Actions" });
+    expect(more).toHaveAttribute("title", "More");
+    expect(more.querySelector(".symbol-ellipsis-circle")).not.toBeNull();
+  });
+
+  describe("long text", () => {
+    beforeEach(() => {
+      Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get: () => 300 });
+      Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get: () => 120 });
+    });
+    afterEach(() => {
+      delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+      delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
+    });
+
+    it("collapses long notes behind Show More", async () => {
+      const user = userEvent.setup();
+      open(detail({ number: 2, notes: "A long note" }));
+      render(<TaskPane />);
+      const toggle = screen.getByRole("button", { name: "Show More" });
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      await user.click(toggle);
+      expect(screen.getByRole("button", { name: "Show Less" })).toHaveAttribute("aria-expanded", "true");
+      expect(screen.queryByRole("button", { name: "Show More" })).not.toBeInTheDocument();
+    });
+
+    it("collapses a long Why and Needs of an open block", async () => {
+      const user = userEvent.setup();
+      open(detail({ ...row({ number: 3, status: "blocked" }), block: { ...blockOn("you"), why: "A long reason", needs: "A long need" } }));
+      render(<TaskPane />);
+      const region = screen.getByRole("region", { name: "Blocked" });
+      const toggles = within(region).getAllByRole("button", { name: "Show More" });
+      expect(toggles).toHaveLength(2);
+      await user.click(toggles[0]);
+      expect(within(region).getAllByRole("button", { name: "Show More" })).toHaveLength(1);
+      expect(within(region).getByRole("button", { name: "Show Less" })).toBeInTheDocument();
+    });
+  });
+
+  it("offers no Show More for short text", () => {
+    open(detail({ number: 2, notes: "Short" }));
+    render(<TaskPane />);
+    expect(screen.queryByRole("button", { name: "Show More" })).not.toBeInTheDocument();
   });
 });
 

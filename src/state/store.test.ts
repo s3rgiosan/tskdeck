@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api, onBoardChanged } from "../api/client";
+import type { Settings } from "../api/types";
 import { sidebarModel } from "../board/sidebar";
 import { detail, row } from "../test/fixtures";
 import { resetBoardSubscription, useDeck } from "./store";
@@ -326,6 +327,7 @@ describe("renameProject", () => {
     vi.mocked(api.saveSettings).mockResolvedValue();
     useDeck.setState({
       settings: { ...useDeck.getState().settings, projectNames: { "/home/test/a": "Alpha", "/home/test/b": "Beta" } },
+      settingsLoaded: true,
     });
     await useDeck.getState().renameProject("/home/test/a", " ");
     expect(useDeck.getState().settings.projectNames).toEqual({ "/home/test/b": "Beta" });
@@ -373,5 +375,318 @@ describe("sort by project", () => {
     useDeck.setState({ scope: { kind: "all" } });
     await useDeck.getState().refresh();
     expect(useDeck.getState().rows.map((r) => r.number)).toEqual([1, 2, 3, 4, 5]);
+  });
+});
+
+const DONE = { kind: "done" as const, clean: false };
+
+function markDone(number: number) {
+  return useDeck
+    .getState()
+    .run(
+      { kind: "status", number, change: DONE },
+      { kind: "status", number, from: "started", to: "done", dispatched: false },
+      "Mark Done",
+    );
+}
+
+function markReady(number: number) {
+  return { kind: "status" as const, number, from: "open" as const, to: "ready" as const, dispatched: false };
+}
+
+describe("write results", () => {
+  it("resolves to true when a write succeeds and to false when tsk refuses it", async () => {
+    useDeck.setState({ rows: [row({ number: 1, status: "started" })] });
+    vi.mocked(api.setStatus)
+      .mockResolvedValueOnce()
+      .mockRejectedValueOnce({ kind: "refused", code: "after-not-done", message: "T3 is not done" });
+    await expect(markDone(1)).resolves.toBe(true);
+    await expect(markDone(1)).resolves.toBe(false);
+  });
+
+  it("resolves a bulk write to true only when every task was written", async () => {
+    useDeck.setState({ rows: [row({ number: 1, status: "ready" }), row({ number: 2, status: "ready" })] });
+    const cmds = [1, 2].map((number) => ({ kind: "status" as const, number, change: DONE }));
+    const changes = [1, 2].map((number) => ({ kind: "status" as const, number, from: "ready" as const, to: "done" as const, dispatched: false }));
+    vi.mocked(api.setStatus).mockResolvedValue();
+    await expect(useDeck.getState().runBulk(cmds, changes, "Mark Done")).resolves.toBe(true);
+    vi.mocked(api.setStatus).mockImplementation((number) =>
+      number === 2 ? Promise.reject({ kind: "refused", code: "x", message: "no" }) : Promise.resolve(),
+    );
+    await expect(useDeck.getState().runBulk(cmds, changes, "Mark Done")).resolves.toBe(false);
+  });
+});
+
+describe("cursor after a write", () => {
+  const started = (number: number) => row({ number, status: "started" });
+
+  async function listThree(cursor: number) {
+    useDeck.setState({ scope: { kind: "all" } });
+    vi.mocked(api.listScope).mockResolvedValue([started(1), started(2), started(3)]);
+    await useDeck.getState().refresh();
+    useDeck.setState({ cursor });
+  }
+
+  it("moves to the next row after Mark Done of the cursor task", async () => {
+    await listThree(2);
+    vi.mocked(api.setStatus).mockResolvedValue();
+    vi.mocked(api.listScope).mockResolvedValue([started(1), started(3)]);
+    await markDone(2);
+    expect(useDeck.getState().cursor).toBe(3);
+  });
+
+  it("moves to the next row after Archive of the cursor task", async () => {
+    await listThree(2);
+    vi.mocked(api.setArchived).mockResolvedValue();
+    vi.mocked(api.listScope).mockResolvedValue([started(1), started(3)]);
+    await useDeck
+      .getState()
+      .run({ kind: "archive", number: 2, archived: true }, { kind: "archive", number: 2, archived: true }, "Archive");
+    expect(useDeck.getState().cursor).toBe(3);
+  });
+
+  it("moves to the new last row when the last row is marked done", async () => {
+    await listThree(3);
+    vi.mocked(api.setStatus).mockResolvedValue();
+    vi.mocked(api.listScope).mockResolvedValue([started(1), started(2)]);
+    await markDone(3);
+    expect(useDeck.getState().cursor).toBe(2);
+  });
+});
+
+describe("settings that failed to load", () => {
+  const onDisk = { ...settings, tskPath: "/home/test/bin/tsk", projectNames: { "/home/test/a": "Alpha" } };
+
+  it("reads the settings again before a save and keeps what the file holds", async () => {
+    let file: Settings = onDisk;
+    vi.mocked(api.getSettings).mockRejectedValueOnce("settings file is locked").mockImplementation(async () => file);
+    vi.mocked(api.saveSettings).mockImplementation(async (next) => {
+      file = next;
+    });
+    await useDeck.getState().init();
+    await useDeck.getState().saveSettings({ ...useDeck.getState().settings, openMode: "overlay" });
+    expect(file).toEqual({ ...onDisk, openMode: "overlay" });
+    expect(useDeck.getState().settings).toEqual(file);
+  });
+
+  it("keeps the file when the settings still cannot be read", async () => {
+    let file: Settings = onDisk;
+    vi.mocked(api.getSettings).mockRejectedValue("settings file is locked");
+    vi.mocked(api.saveSettings).mockImplementation(async (next) => {
+      file = next;
+    });
+    await useDeck.getState().init();
+    await useDeck.getState().saveSettings({ ...useDeck.getState().settings, openMode: "overlay" });
+    await useDeck.getState().renameProject("/home/test/b", "Beta");
+    expect(file).toBe(onDisk);
+    expect(useDeck.getState().errorTitle).toBe("Settings couldn't be saved");
+    expect(useDeck.getState().error).toBe("settings file is locked");
+  });
+
+  it("renames a project without dropping the names the file holds", async () => {
+    let file: Settings = onDisk;
+    vi.mocked(api.getSettings).mockRejectedValueOnce("settings file is locked").mockImplementation(async () => file);
+    vi.mocked(api.saveSettings).mockImplementation(async (next) => {
+      file = next;
+    });
+    await useDeck.getState().init();
+    await useDeck.getState().renameProject("/home/test/b", "Beta");
+    expect(file.projectNames).toEqual({ "/home/test/a": "Alpha", "/home/test/b": "Beta" });
+    expect(file.tskPath).toBe("/home/test/bin/tsk");
+  });
+});
+
+describe("reading the open task", () => {
+  it("reports a failed read during a refresh as that task's failure", async () => {
+    useDeck.setState({ openTask: 2 });
+    vi.mocked(api.getTask).mockRejectedValue({ kind: "notFound" });
+    await useDeck.getState().refresh();
+    const state = useDeck.getState();
+    expect(state.errorTitle).toBe("T2 couldn't be opened");
+    expect(state.error).toBe("tsk was not found");
+    expect(state.errorTask).toBe(2);
+    expect(state.tskError).toBeNull();
+    expect(state.rows).toHaveLength(1);
+  });
+
+  it("clears the previous task's detail as soon as another task opens", () => {
+    useDeck.setState({ openTask: 1, detail: detail({ number: 1 }) });
+    vi.mocked(api.getTask).mockReturnValue(new Promise(() => {}));
+    void useDeck.getState().open(2);
+    expect(useDeck.getState().detail).toBeNull();
+  });
+
+  it("ties a failed open to the task", async () => {
+    vi.mocked(api.getTask).mockRejectedValue({ kind: "unexpected", exit: 1, message: "T4 is unreadable" });
+    await useDeck.getState().open(4);
+    expect(useDeck.getState().errorTask).toBe(4);
+    expect(useDeck.getState().errorTitle).toBe("T4 couldn't be opened");
+  });
+
+  it("drops a late failure for a task that is no longer open", async () => {
+    let reject: (e: unknown) => void = () => {};
+    vi.mocked(api.getTask)
+      .mockImplementationOnce(() => new Promise((_, r) => (reject = r)))
+      .mockResolvedValueOnce(detail({ number: 2 }));
+    const first = useDeck.getState().open(1);
+    await useDeck.getState().open(2);
+    reject({ kind: "unexpected", exit: 1, message: "T1 is unreadable" });
+    await first;
+    expect(useDeck.getState().error).toBeNull();
+    expect(useDeck.getState().detail?.number).toBe(2);
+  });
+});
+
+describe("marks", () => {
+  it("drops the mark of a task that leaves the board", async () => {
+    useDeck.setState({ scope: { kind: "all" } });
+    vi.mocked(api.listScope).mockResolvedValue([row({ number: 1, status: "started" }), row({ number: 2, status: "started" })]);
+    await useDeck.getState().refresh();
+    useDeck.setState({ marks: [1, 2] });
+    vi.mocked(api.listScope).mockResolvedValue([row({ number: 1, status: "started" })]);
+    await useDeck.getState().refresh();
+    expect(useDeck.getState().marks).toEqual([1]);
+  });
+
+  it("drops the mark of a task a search filters out", () => {
+    vi.mocked(api.getTask).mockRejectedValue({ kind: "unexpected", exit: 1, message: "unreadable" });
+    useDeck.setState({
+      rows: [row({ number: 1, title: "Alpha report" }), row({ number: 2, title: "Beta report" })],
+      marks: [1, 2],
+    });
+    useDeck.getState().setQuery("alpha");
+    expect(useDeck.getState().marks).toEqual([1]);
+  });
+});
+
+describe("undo", () => {
+  const entry = (number: number) => ({ label: "Mark Ready", changes: [markReady(number)] });
+
+  it("ignores an Undo while another Undo runs", async () => {
+    const releases: (() => void)[] = [];
+    vi.mocked(api.setStatus).mockImplementation(() => new Promise<void>((r) => releases.push(r)));
+    useDeck.setState({ undo: [entry(1), entry(2)] });
+    const first = useDeck.getState().undoLast();
+    const second = useDeck.getState().undoLast();
+    for (const release of releases) release();
+    await Promise.all([first, second]);
+    expect(useDeck.getState().undo).toEqual([entry(1)]);
+  });
+
+  it("ties a failed undo to the task it could not change", async () => {
+    vi.mocked(api.setStatus).mockRejectedValue({ kind: "refused", code: "x", message: "T4 is locked" });
+    useDeck.setState({ undo: [entry(4)] });
+    await useDeck.getState().undoLast();
+    expect(useDeck.getState().errorTask).toBe(4);
+    expect(useDeck.getState().error).toBe("T4: T4 is locked");
+  });
+
+  it("keeps the part of a bulk undo that failed", async () => {
+    vi.mocked(api.setStatus).mockImplementation((number) =>
+      number === 1 ? Promise.reject({ kind: "refused", code: "x", message: "T1 is locked" }) : Promise.resolve(),
+    );
+    useDeck.setState({ undo: [{ label: "Mark Ready", changes: [markReady(1), markReady(2)] }] });
+    await useDeck.getState().undoLast();
+    expect(useDeck.getState().undo).toEqual([{ label: "Mark Ready", changes: [markReady(1)] }]);
+    expect(useDeck.getState().errorTitle).toBe("Mark Ready couldn't be undone");
+  });
+
+  it("names a change it cannot reverse when asked to undo it", async () => {
+    useDeck.setState({ irreversible: "Add Step" });
+    await useDeck.getState().undoLast();
+    expect(useDeck.getState().errorTitle).toBe("Undo isn't available");
+    expect(useDeck.getState().error).toBe("Can't undo Add Step");
+    expect(useDeck.getState().irreversible).toBeNull();
+  });
+});
+
+describe("adding a step", () => {
+  const outline = { id: "00000000-0000-4000-8000-00000000000a", short_id: "a", text: "Outline", done: false };
+  const summary = { id: "00000000-0000-4000-8000-00000000000b", short_id: "b", text: "Write the summary", done: false };
+  const op = { kind: "add" as const, text: "Write the summary", place: null };
+  let steps: (typeof outline)[];
+
+  beforeEach(() => {
+    steps = [outline];
+    vi.mocked(api.step).mockImplementation(async (_number, stepOp) => {
+      if (stepOp.kind === "add") steps = [...steps, summary];
+      if (stepOp.kind === "remove") steps = steps.filter((s) => s.short_id !== stepOp.id);
+    });
+    vi.mocked(api.getTask).mockImplementation(async () => detail({ number: 1, steps }));
+  });
+
+  function addStep() {
+    return useDeck.getState().run({ kind: "step", number: 1, op }, { kind: "step", number: 1, op, before: {} }, "Add Step");
+  }
+
+  it("can be undone while the task is open", async () => {
+    useDeck.setState({ openTask: 1, detail: detail({ number: 1, steps: [outline] }) });
+    await addStep();
+    expect(useDeck.getState().irreversible).toBeNull();
+    await useDeck.getState().undoLast();
+    expect(steps).toEqual([outline]);
+    expect(useDeck.getState().detail?.steps).toEqual([outline]);
+  });
+
+  it("is reported as irreversible while the task is closed", async () => {
+    await addStep();
+    expect(useDeck.getState().undo).toHaveLength(0);
+    expect(useDeck.getState().irreversible).toBe("Add Step");
+  });
+});
+
+describe("search after a write", () => {
+  it("matches an edited title by its new text", async () => {
+    vi.mocked(api.editTask).mockResolvedValue();
+    vi.mocked(api.getTask).mockResolvedValue(detail({ number: 1, title: "New title" }));
+    vi.mocked(api.listScope).mockResolvedValue([row({ number: 1, status: "started", title: "New title" })]);
+    useDeck.setState({
+      scope: { kind: "all" },
+      rows: [row({ number: 1, status: "started", title: "Old title" })],
+      query: "new",
+      searchIndex: new Map([[1, { number: 1, title: "Old title", thread: null, assignee: null, notes: null, steps: [] }]]),
+    });
+    await useDeck
+      .getState()
+      .run(
+        { kind: "edit", number: 1, input: { title: "New title" } },
+        { kind: "edit", number: 1, before: { title: "Old title" }, after: { title: "New title" } },
+        "Edit Title",
+      );
+    await useDeck.getState().ensureSearchIndex();
+    expect(useDeck.getState().visibleRows().map((r) => r.number)).toEqual([1]);
+  });
+});
+
+describe("store failures", () => {
+  it("adds that the board was re-read when tsk could not save a write", async () => {
+    useDeck.setState({ rows: [row({ number: 1, status: "started" })] });
+    vi.mocked(api.setStatus).mockRejectedValue({ kind: "store", message: "the store is locked" });
+    await markDone(1);
+    expect(useDeck.getState().error).toBe("the store is locked; the board was re-read");
+  });
+
+  it("shows tsk's message when the board could not be read", async () => {
+    vi.mocked(api.listScope).mockRejectedValue({ kind: "store", message: "the store is unreadable" });
+    await useDeck.getState().refresh();
+    expect(useDeck.getState().error).toBe("the store is unreadable");
+  });
+});
+
+describe("renaming projects back to back", () => {
+  it("keeps both names", async () => {
+    let file: Settings = settings;
+    vi.mocked(api.saveSettings).mockImplementation(async (next) => {
+      await Promise.resolve();
+      file = next;
+    });
+    useDeck.setState({ settingsLoaded: true });
+    await Promise.all([
+      useDeck.getState().renameProject("/home/test/a", "Alpha"),
+      useDeck.getState().renameProject("/home/test/b", "Beta"),
+    ]);
+    const both = { "/home/test/a": "Alpha", "/home/test/b": "Beta" };
+    expect(file.projectNames).toEqual(both);
+    expect(useDeck.getState().settings.projectNames).toEqual(both);
   });
 });

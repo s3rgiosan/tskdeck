@@ -2,13 +2,14 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActionId } from "./actions";
-import { DEFAULT_KEYMAP, defaultKeymap } from "./keymap";
+import { defaultKeymap } from "./keymap";
 import { useKeymap } from "./useKeymap";
 
 type Handlers = Partial<Record<ActionId, () => boolean | void>>;
 
 function Harness(props: { handlers: Handlers; context?: "board" | "task" | "block" | "review"; mac?: boolean }) {
-  useKeymap(DEFAULT_KEYMAP, props.handlers, props.context ?? "board", props.mac ?? false);
+  const mac = props.mac ?? false;
+  useKeymap(defaultKeymap(mac), props.handlers, props.context ?? "board", mac);
   return (
     <>
       <input aria-label="field" role="textbox" />

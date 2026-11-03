@@ -19,7 +19,8 @@ function List(props: {
 }) {
   const { title, rows, heading = true, onRestore } = props;
   const [cursor, setCursor] = useState<number | null>(null);
-  const list = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState(false);
+  const list = useRef<HTMLUListElement>(null);
   const current = rows.some((r) => r.number === cursor) ? cursor : (rows[0]?.number ?? null);
 
   /** Moves the cursor one row and gives that row the keyboard. */
@@ -40,10 +41,14 @@ function List(props: {
       )}
       {rows.length === 0 && <p className="board-note">{EMPTY_NOTES[title]}</p>}
       {rows.length > 0 && (
-        <div
+        <ul
           ref={list}
-          role="listbox"
+          className="drawer-rows"
           aria-label={`${title} tasks`}
+          onFocus={() => setActive(true)}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setActive(false);
+          }}
           onKeyDown={(e) => {
             if (e.target instanceof HTMLElement && e.target.closest("button")) return;
             switch (e.key) {
@@ -61,13 +66,11 @@ function List(props: {
           }}
         >
           {rows.map((r) => (
-            <div
+            <li
               key={r.number}
               data-number={r.number}
-              role="option"
-              aria-selected={r.number === current}
               tabIndex={r.number === current ? 0 : -1}
-              className={`row${r.number === current ? " is-cursor" : ""}`}
+              className={`row${active && r.number === current ? " is-cursor" : ""}`}
               onFocus={() => setCursor(r.number)}
             >
               <span className="row-number">T{r.number}</span>
@@ -77,9 +80,9 @@ function List(props: {
                   Restore
                 </button>
               )}
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </section>
   );
@@ -94,22 +97,37 @@ export function DoneDrawer(props: { onClose: () => void }) {
   const [archived, setArchived] = useState<TaskRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Counts the requests so only the newest listing is applied; unmounting retires the last one.
+  const latest = useRef(0);
+  const mounted = useRef(true);
+
   const load = useCallback(async () => {
+    latest.current += 1;
+    const request = latest.current;
     try {
       const [d, a] = await Promise.all([
         api.listScope(scope, { shelf: "done", group: "none", sort: "recent" }),
         api.listScope(scope, { shelf: "archived", group: "none", sort: "recent" }),
       ]);
+      if (!mounted.current || request !== latest.current) return;
       setDone(d);
       setArchived(a);
       setError(null);
     } catch (e) {
+      if (!mounted.current || request !== latest.current) return;
       setError(errorMessage(e as TskError | string));
     }
   }, [scope]);
 
   useEffect(() => {
+    mounted.current = true;
     void load();
+    const requests = latest;
+    const alive = mounted;
+    return () => {
+      alive.current = false;
+      requests.current += 1;
+    };
   }, [load]);
 
   async function restore(row: TaskRow) {

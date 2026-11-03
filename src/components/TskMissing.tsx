@@ -1,6 +1,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { ReactNode } from "react";
 import type { TskError, TskInfo } from "../api/types";
+import { errorMessage } from "../api/client";
 import { useDeck } from "../state/store";
 
 const INSTALL_URL = "https://gettsk.sh/docs/install/";
@@ -17,7 +18,7 @@ function describe(tsk: TskInfo | null, error: TskError | null): { title: string;
     };
   }
   if (error !== null && error.kind !== "notFound") {
-    return { title: "Can't Run tsk", body: error.message };
+    return { title: "Can't Run tsk", body: errorMessage(error) };
   }
   return { title: "tsk Not Found", body: "tskdeck is a desktop client for the tsk CLI and needs it installed." };
 }

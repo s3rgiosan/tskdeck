@@ -17,7 +17,8 @@ impl FullscreenStates {
     /// A window starts out windowed.
     pub fn record(&self, label: &str, fullscreen: bool) -> bool {
         let mut states = self.0.lock().unwrap_or_else(|e| e.into_inner());
-        states.insert(label.to_owned(), fullscreen).unwrap_or(false) != fullscreen
+        let previous = states.insert(label.to_owned(), fullscreen).unwrap_or(false);
+        previous != fullscreen
     }
 }
 

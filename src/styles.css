@@ -613,15 +613,20 @@ html.window-inactive :is(.toolbar-title, .toolbar-button, .toolbar-popup select,
   transform: translateY(-50%);
 }
 
-/* The toolbar's search field is a capsule like the other toolbar items. */
+/* Search fields use the standard field look with room for the magnifying glass. */
 .search-field input {
+  padding-left: 32px;
+  width: 100%;
+}
+
+/* The toolbar's search field is a capsule like the other toolbar items. */
+.toolbar .search-field input {
   background: var(--toolbar-item);
   border: 0;
   border-radius: calc(var(--toolbar-item-size) / 2);
   box-shadow: 0 0 0 0.5px var(--toolbar-item-rim);
   height: var(--toolbar-item-size);
   padding: 0 12px 0 32px;
-  width: 100%;
 }
 
 /* The board starts below the toolbar; scrolled content passes under it. */
@@ -632,7 +637,7 @@ html.window-inactive :is(.toolbar-title, .toolbar-button, .toolbar-popup select,
 }
 
 .main.has-markbar .board-scroll {
-  padding-top: calc(var(--toolbar-height) + 27px);
+  padding-bottom: 47px;
 }
 
 .board-note {
@@ -724,8 +729,11 @@ html.window-inactive :is(.toolbar-title, .toolbar-button, .toolbar-popup select,
   padding: 6px 8px;
 }
 
-.row.is-cursor,
 .row.is-marked {
+  background: var(--fill);
+}
+
+.row.is-cursor {
   background: var(--selection-unfocused);
 }
 
@@ -734,25 +742,51 @@ html.window-inactive :is(.toolbar-title, .toolbar-button, .toolbar-popup select,
   color: var(--label);
 }
 
-.row.is-marked {
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-
-html:not(.window-inactive) :is(.board-list, .drawer-group [role="listbox"]):focus-within .row.is-cursor {
+html:not(.window-inactive) :is(.board-list, .drawer-rows):focus-within .row.is-cursor {
   background: var(--selection);
   color: var(--selection-text);
 }
 
-html:not(.window-inactive) :is(.board-list, .drawer-group [role="listbox"]):focus-within .row.is-cursor.is-marked {
-  box-shadow: inset 3px 0 0 var(--selection-text);
-}
-
-html:not(.window-inactive) :is(.board-list, .drawer-group [role="listbox"]):focus-within .row.is-cursor :is(.row-number, .row-wait, .row-tag) {
+html:not(.window-inactive) :is(.board-list, .drawer-rows):focus-within .row.is-cursor :is(.row-number, .row-wait, .row-tag) {
   color: var(--selection-text);
 }
 
-html:not(.window-inactive) :is(.board-list, .drawer-group [role="listbox"]):focus-within .row.is-cursor .row-status {
+html:not(.window-inactive) :is(.board-list, .drawer-rows):focus-within .row.is-cursor .row-status {
   --dot: var(--selection-text);
+}
+
+html:not(.window-inactive) .board-list:focus-within .row.is-cursor .row-check {
+  --box: var(--selection-text);
+  --tick: var(--selection);
+}
+
+/* Mark mode puts a checkbox-like box before each row; a marked row's box is filled and carries a check. */
+.row-check {
+  --box: var(--secondary-label);
+  --tick: var(--background);
+  border: 1.5px solid var(--box);
+  border-radius: 4px;
+  box-sizing: border-box;
+  flex: none;
+  height: 14px;
+  position: relative;
+  width: 14px;
+}
+
+.row-check.is-checked {
+  background: var(--box);
+}
+
+.row-check.is-checked::after {
+  border: solid var(--tick);
+  border-width: 0 1.5px 1.5px 0;
+  content: "";
+  height: 7px;
+  left: 3.5px;
+  position: absolute;
+  top: 0.5px;
+  transform: rotate(45deg);
+  width: 3.5px;
 }
 
 .row-number {
@@ -778,7 +812,8 @@ html:not(.window-inactive) :is(.board-list, .drawer-group [role="listbox"]):focu
  * Open is a hollow ring, ready a filled dot, started a ring around a dot, blocked a red dot, in review a
  * red diamond, done a check mark.
  */
-.status-open {
+.status-open,
+.status-unknown {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px var(--dot);
 }
@@ -903,10 +938,24 @@ html:not(.window-inactive) :is(.board-list, .drawer-group [role="listbox"]):focu
   overflow-wrap: anywhere;
 }
 
+.pane-notes-block {
+  margin-top: 12px;
+}
+
 .pane-notes {
   font-size: 15px;
   line-height: 20px;
-  margin-top: 12px;
+}
+
+/* Long text shows six lines, then Show More reveals the rest. */
+.clamp.is-clamped {
+  max-height: 6lh;
+  overflow: hidden;
+}
+
+.pane-notes-block .clamp {
+  font-size: 15px;
+  line-height: 20px;
 }
 
 .pane-section-title {
@@ -973,8 +1022,10 @@ html:not(.window-inactive) :is(.board-list, .drawer-group [role="listbox"]):focu
   flex: 1 1 0;
 }
 
+/* Plain values start where the text inside the fields beside them starts. */
 .fields .field-value {
   flex-wrap: nowrap;
+  padding: 0 7px;
 }
 
 .field-value .symbol {
@@ -1245,7 +1296,8 @@ html:not(.window-inactive) :is(.board-list, .drawer-group [role="listbox"]):focu
   padding: 1px 6px;
 }
 
-.badge-open {
+.badge-open,
+.badge-unknown {
   background: color-mix(in srgb, var(--label) 10%, transparent);
 }
 
@@ -1307,21 +1359,32 @@ kbd {
   gap: 8px;
 }
 
-/* The multi-select bar sits just below the toolbar, over the top of the board. */
+/* The multi-select bar overlays the bottom of the board; the board reserves its height so the list stays put. */
 .markbar {
   background: var(--selection-unfocused);
+  bottom: 0;
   font-size: 12px;
   left: 0;
   line-height: 15px;
   padding: 4px 12px;
   position: absolute;
   right: 0;
-  top: var(--toolbar-height);
   z-index: 1;
 }
 
 .drawer {
   padding: 4px 14px 12px;
+}
+
+/* Drawer rows are filled only while one holds the cursor. */
+.drawer-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.drawer-rows .row:focus-visible {
+  outline: none;
 }
 
 .drawer-head {
@@ -1423,17 +1486,24 @@ kbd {
   justify-content: flex-end;
 }
 
+/* A destructive choice shows in red and is never the default button. */
+button.is-destructive {
+  color: var(--red);
+}
+
+/* The key being recorded takes the accent. */
+.keymap-editor button.is-recording {
+  background: var(--accent);
+  color: var(--selection-text);
+}
+
 .modal > .flow-error {
   margin: 0 20px 20px;
 }
 
-.palette input {
-  border: 0;
-  border-bottom: 1px solid var(--separator);
-  border-radius: 0;
-  height: auto;
-  padding: 10px 14px;
-  width: 100%;
+.palette .search-field {
+  flex: none;
+  margin: 12px 14px 8px;
 }
 
 .palette ul,
@@ -1464,6 +1534,8 @@ kbd {
 .palette .palette-empty {
   color: var(--secondary-label);
   cursor: default;
+  margin: 0;
+  padding: 6px 14px 12px;
 }
 
 .settings-window {

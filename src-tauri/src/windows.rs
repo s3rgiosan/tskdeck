@@ -10,9 +10,7 @@ pub const SETTINGS_LABEL: &str = "settings";
 /// frame, sits centred above the pane toolbar, with the window controls in the corner.
 pub fn open_settings(app: &AppHandle) -> tauri::Result<()> {
     if let Some(window) = app.get_webview_window(SETTINGS_LABEL) {
-        window.unminimize()?;
-        window.show()?;
-        return window.set_focus();
+        return focus(&window);
     }
     let builder = WebviewWindowBuilder::new(
         app,
@@ -30,6 +28,18 @@ pub fn open_settings(app: &AppHandle) -> tauri::Result<()> {
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .hidden_title(true)
         .traffic_light_position(tauri::LogicalPosition::new(9.0, 18.0));
-    builder.build()?;
-    Ok(())
+    let Err(error) = builder.build() else {
+        return Ok(());
+    };
+    // Two calls racing to create the window: the loser focuses the winner's window.
+    match app.get_webview_window(SETTINGS_LABEL) {
+        Some(window) => focus(&window),
+        None => Err(error),
+    }
+}
+
+fn focus(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    window.unminimize()?;
+    window.show()?;
+    window.set_focus()
 }

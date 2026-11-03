@@ -1,8 +1,10 @@
 /** `[seconds, nanos]` since the Unix epoch. */
 export type Timestamp = [number, number];
 
-export type Status = "open" | "ready" | "started" | "blocked" | "review" | "done";
-export type CheckState = "open" | "passed" | "failed";
+/** `unknown` stands for a status tsk reports that tskdeck does not recognise. */
+export type Status = "open" | "ready" | "started" | "blocked" | "review" | "done" | "unknown";
+/** `unknown` stands for a check state tsk reports that tskdeck does not recognise. */
+export type CheckState = "open" | "passed" | "failed" | "unknown";
 
 export interface AfterLink {
   task: number;
@@ -172,7 +174,8 @@ export type TskError =
   | { kind: "usage"; message: string }
   | { kind: "store"; message: string }
   | { kind: "unexpected"; exit: number | null; message: string }
-  | { kind: "parse"; message: string };
+  | { kind: "parse"; message: string }
+  | { kind: "timeout"; seconds: number };
 
 export type OpenMode = "beside" | "overlay";
 

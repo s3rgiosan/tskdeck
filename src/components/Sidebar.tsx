@@ -71,6 +71,18 @@ export function Sidebar(props: { onRename: (path: string) => void }) {
     showPullDown([{ id: RENAME_PROJECT, title: "Rename…" }], e.clientX, e.clientY).catch(() => null);
   }
 
+  /** Opens the highlighted project's menu below its row; the context-menu key and Shift+F10 reach the list. */
+  function showHighlightedProjectMenu(e: React.MouseEvent, list: ListName) {
+    if (e.target !== e.currentTarget || currentList !== list || current === undefined) return;
+    if (current.scope.kind !== "project") return;
+    const row = document.getElementById(itemId(current));
+    if (!row) return;
+    e.preventDefault();
+    menuProject.current = current.scope.path;
+    const rect = row.getBoundingClientRect();
+    showPullDown([{ id: RENAME_PROJECT, title: "Rename…" }], rect.left, rect.bottom).catch(() => null);
+  }
+
   const [filter, setFilter] = useState<Filter | null>(null);
   const [highlight, setHighlight] = useState(0);
   const filterInput = useRef<HTMLInputElement>(null);
@@ -237,6 +249,7 @@ export function Sidebar(props: { onRename: (path: string) => void }) {
         aria-labelledby={`side-title-${name}`}
         tabIndex={holdsCurrent ? 0 : -1}
         aria-activedescendant={holdsCurrent && current ? itemId(current) : undefined}
+        onContextMenu={(e) => showHighlightedProjectMenu(e, name)}
         onFocus={(e) => {
           if (e.target === e.currentTarget && useDeck.getState().focus !== "sidebar") useDeck.setState({ focus: "sidebar" });
         }}

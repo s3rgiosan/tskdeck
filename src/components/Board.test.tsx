@@ -46,3 +46,44 @@ describe("Board grouped by project", () => {
     expect(groupTitles()).toEqual(["desk"]);
   });
 });
+
+describe("Board multi-select", () => {
+  beforeEach(() => {
+    const rows = [
+      row({ number: 1, status: "started" }),
+      row({ number: 2, status: "started" }),
+      row({ number: 3, status: "started" }),
+    ];
+    useDeck.setState({ rows, allRows: rows, options: { ...useDeck.getInitialState().options, group: "none" } });
+  });
+
+  it("is a single-select list outside mark mode, selecting the cursor row", () => {
+    useDeck.setState({ cursor: 2 });
+    render(<Board onNewTask={() => {}} />);
+    const list = screen.getByRole("listbox", { name: "Tasks" });
+    expect(list).not.toHaveAttribute("aria-multiselectable");
+    expect(screen.getByRole("option", { name: /T2/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("option", { name: /T1/ })).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("selects the marked rows in mark mode and leaves the cursor to the active descendant", () => {
+    useDeck.setState({ cursor: 2, marks: [1, 3], markMode: true });
+    render(<Board onNewTask={() => {}} />);
+    const list = screen.getByRole("listbox", { name: "Tasks" });
+    expect(list).toHaveAttribute("aria-multiselectable", "true");
+    expect(screen.getByRole("option", { name: /T1/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("option", { name: /T3/ })).toHaveAttribute("aria-selected", "true");
+    const cursorRow = screen.getByRole("option", { name: /T2/ });
+    expect(cursorRow).toHaveAttribute("aria-selected", "false");
+    expect(list).toHaveAttribute("aria-activedescendant", cursorRow.id);
+  });
+
+  it("shows a check beside each marked row so marks and cursor differ", () => {
+    useDeck.setState({ cursor: 2, marks: [1], markMode: true });
+    render(<Board onNewTask={() => {}} />);
+    const marked = screen.getByRole("option", { name: /T1/ });
+    const other = screen.getByRole("option", { name: /T2/ });
+    expect(marked.querySelector(".row-check")).toHaveClass("is-checked");
+    expect(other.querySelector(".row-check")).not.toHaveClass("is-checked");
+  });
+});

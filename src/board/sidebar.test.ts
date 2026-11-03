@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { row } from "../test/fixtures";
-import { projectLabelsOf, scopeTitle, sidebarModel, sortByProject } from "./sidebar";
+import { onDesk, projectLabelsOf, scopeTitle, sidebarModel, sortByProject } from "./sidebar";
 
 describe("sidebarModel", () => {
   it("disambiguates colliding basenames", () => {
@@ -112,5 +112,12 @@ describe("sortByProject", () => {
       ["/home/test/b", "Site"],
     ]);
     expect(sortByProject(rows, labels).map((r) => r.number)).toEqual([1, 3, 2]);
+  });
+});
+
+describe("onDesk", () => {
+  it("keeps a desk task with an unknown status on the desk, like an open one", () => {
+    expect(onDesk(row({ status: "unknown", project: null }))).toBe(true);
+    expect(onDesk(row({ status: "unknown", project: "/home/test/alpha" }))).toBe(false);
   });
 });

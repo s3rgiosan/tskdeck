@@ -1,5 +1,6 @@
 //! Tauri commands that expose the `tsk` module and settings to the UI.
 
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::{Mutex, RwLock};
 
@@ -41,10 +42,16 @@ pub fn locate_tsk(setting: Option<&std::path::Path>) -> Option<Tsk> {
     let candidates =
         locate::default_candidates(dirs::home_dir().as_deref(), local_app_data.as_deref());
     let bin = locate::locate(setting, login_path.as_deref(), &candidates)?;
-    Some(Tsk {
-        bin,
-        env: Vec::new(),
-    })
+    Some(tsk_with_path(bin, login_path))
+}
+
+/// A `Tsk` that runs with the login-shell `PATH`, when there is one, so the commands
+/// it spawns resolve the same way as in a terminal.
+fn tsk_with_path(bin: PathBuf, login_path: Option<OsString>) -> Tsk {
+    let env = login_path
+        .map(|path| vec![(OsString::from("PATH"), path)])
+        .unwrap_or_default();
+    Tsk { bin, env }
 }
 
 /// Locates `tsk` again from the saved path setting and caches the result.
@@ -210,37 +217,65 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<Settings, String
     Ok(guard.clone())
 }
 
-/// Writes the settings file, keeps the settings in `slot` and passes the saved settings
-/// to `notify`. Returns whether `tsk_path` changed.
+/// Writes the settings file and keeps the settings in `slot`. Returns whether
+/// `tsk_path` changed. A `tsk_path` must be absolute.
 pub fn store_settings(
     slot: &Mutex<Settings>,
     path: &std::path::Path,
     settings: Settings,
-    notify: impl FnOnce(&Settings),
 ) -> Result<bool, String> {
+    if settings
+        .tsk_path
+        .as_deref()
+        .is_some_and(|p| !p.is_absolute())
+    {
+        return Err("The tsk path must be absolute.".to_string());
+    }
     let mut guard = slot.lock().map_err(|e| e.to_string())?;
     let changed = guard.tsk_path != settings.tsk_path;
     settings::save(path, &settings).map_err(|e| e.to_string())?;
-    notify(&settings);
     *guard = settings;
     Ok(changed)
 }
 
-/// Saves the settings, tells every window with a `settings-changed` event and, when
-/// `tsk_path` changed, locates `tsk` again.
-#[tauri::command]
-pub async fn save_settings(
-    app: AppHandle,
-    state: State<'_, AppState>,
+/// Stores the settings, locates `tsk` again when `tsk_path` changed, and only then
+/// passes the saved settings to `notify`, so listeners see the new `tsk` already in place.
+pub fn apply_settings(
+    slot: &Mutex<Settings>,
+    path: &std::path::Path,
     settings: Settings,
+    tsk_slot: &RwLock<Option<Tsk>>,
+    locate: impl FnOnce(Option<&std::path::Path>) -> Option<Tsk>,
+    notify: impl FnOnce(&Settings),
 ) -> Result<(), String> {
-    let path_changed = store_settings(&state.settings, &state.settings_path, settings, |saved| {
-        let _ = app.emit(SETTINGS_CHANGED, saved);
-    })?;
+    let saved = settings.clone();
+    let path_changed = store_settings(slot, path, settings)?;
     if path_changed {
-        relocate(&state.settings, &state.tsk, locate_tsk)?;
+        relocate(slot, tsk_slot, locate)?;
     }
+    notify(&saved);
     Ok(())
+}
+
+/// Saves the settings, locates `tsk` again when `tsk_path` changed and tells every
+/// window with a `settings-changed` event.
+#[tauri::command]
+pub async fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        apply_settings(
+            &state.settings,
+            &state.settings_path,
+            settings,
+            &state.tsk,
+            locate_tsk,
+            |saved| {
+                let _ = app.emit(SETTINGS_CHANGED, saved);
+            },
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Opens the settings window, or brings it to the front when it is already open.
@@ -273,6 +308,11 @@ mod tests {
         }
     }
 
+    /// A `tsk` path that is absolute on every platform.
+    fn abs_tsk() -> PathBuf {
+        std::env::temp_dir().join("test").join("tsk")
+    }
+
     fn cached(slot: &RwLock<Option<Tsk>>) -> Option<PathBuf> {
         slot.read().unwrap().as_ref().map(|t| t.bin.clone())
     }
@@ -296,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn storing_settings_saves_them_and_hands_them_to_notify() {
+    fn storing_settings_saves_them() {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("settings.json");
         let slot = Mutex::new(Settings::default());
@@ -304,11 +344,8 @@ mod tests {
             sidebar_hidden: true,
             ..Settings::default()
         };
-        let mut seen = None;
-        let changed =
-            store_settings(&slot, &path, next.clone(), |s| seen = Some(s.clone())).unwrap();
+        let changed = store_settings(&slot, &path, next.clone()).unwrap();
         assert!(!changed);
-        assert_eq!(seen, Some(next.clone()));
         assert_eq!(settings::load(&path), next);
         assert_eq!(*slot.lock().unwrap(), next);
     }
@@ -319,27 +356,97 @@ mod tests {
         let path = tmp.path().join("settings.json");
         let slot = Mutex::new(Settings::default());
         let next = Settings {
-            tsk_path: Some(PathBuf::from("/opt/test/tsk")),
+            tsk_path: Some(abs_tsk()),
             ..Settings::default()
         };
-        assert!(store_settings(&slot, &path, next, |_| {}).unwrap());
+        assert!(store_settings(&slot, &path, next).unwrap());
     }
 
     #[test]
-    fn storing_settings_that_cannot_be_written_notifies_nobody() {
+    fn storing_a_relative_tsk_path_is_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("settings.json");
+        let slot = Mutex::new(Settings::default());
+        let next = Settings {
+            tsk_path: Some(PathBuf::from("bin/tsk")),
+            ..Settings::default()
+        };
+        assert_eq!(
+            store_settings(&slot, &path, next),
+            Err("The tsk path must be absolute.".to_string())
+        );
+        assert!(!path.exists());
+        assert_eq!(*slot.lock().unwrap(), Settings::default());
+    }
+
+    #[test]
+    fn storing_settings_that_cannot_be_written_fails() {
         let tmp = tempfile::tempdir().unwrap();
         let blocker = tmp.path().join("file");
         std::fs::write(&blocker, "").unwrap();
         let slot = Mutex::new(Settings::default());
+        let result = store_settings(&slot, &blocker.join("settings.json"), Settings::default());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn applying_settings_locates_tsk_before_notifying() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("settings.json");
+        let slot = Mutex::new(Settings::default());
+        let tsk_slot = RwLock::new(None);
+        let next = Settings {
+            tsk_path: Some(abs_tsk()),
+            ..Settings::default()
+        };
+        let mut seen_at_notify = None;
+        apply_settings(
+            &slot,
+            &path,
+            next.clone(),
+            &tsk_slot,
+            |_| Some(fake(abs_tsk().to_str().unwrap())),
+            |saved| {
+                assert_eq!(saved, &next);
+                seen_at_notify = Some(cached(&tsk_slot));
+            },
+        )
+        .unwrap();
+        assert_eq!(seen_at_notify, Some(Some(abs_tsk())));
+    }
+
+    #[test]
+    fn applying_settings_that_cannot_be_written_notifies_nobody() {
+        let tmp = tempfile::tempdir().unwrap();
+        let blocker = tmp.path().join("file");
+        std::fs::write(&blocker, "").unwrap();
+        let slot = Mutex::new(Settings::default());
+        let tsk_slot = RwLock::new(None);
         let mut notified = false;
-        let result = store_settings(
+        let result = apply_settings(
             &slot,
             &blocker.join("settings.json"),
             Settings::default(),
+            &tsk_slot,
+            |_| None,
             |_| notified = true,
         );
         assert!(result.is_err());
         assert!(!notified);
+    }
+
+    #[test]
+    fn tsk_runs_with_the_login_shell_path() {
+        let tsk = tsk_with_path(PathBuf::from("/opt/test/tsk"), Some("/a:/b".into()));
+        assert_eq!(
+            tsk.env,
+            vec![(OsString::from("PATH"), OsString::from("/a:/b"))]
+        );
+        assert!(
+            tsk_with_path(PathBuf::from("/opt/test/tsk"), None)
+                .env
+                .is_empty()
+        );
     }
 
     #[test]

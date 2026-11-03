@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, onBoardChanged } from "./client";
+import { api, errorMessage, onBoardChanged, openDocs, zoom } from "./client";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
@@ -57,6 +57,18 @@ describe("api", () => {
     expect(invoke).toHaveBeenCalledWith("relocate_tsk");
   });
 
+  it("invokes zoom with the direction", async () => {
+    await zoom("in");
+    expect(invoke).toHaveBeenCalledWith("zoom", { direction: "in" });
+    await zoom("reset");
+    expect(invoke).toHaveBeenCalledWith("zoom", { direction: "reset" });
+  });
+
+  it("invokes open_docs without arguments", async () => {
+    await openDocs();
+    expect(invoke).toHaveBeenCalledWith("open_docs");
+  });
+
   it("returns the invoke result", async () => {
     vi.mocked(invoke).mockResolvedValue(42);
     await expect(api.capture({ title: "Example task" })).resolves.toBe(42);
@@ -83,11 +95,16 @@ describe("errorMessage", () => {
     );
   });
 
-  it("maps notFound and store errors to fixed text", () => {
+  it("maps notFound to fixed text", () => {
     expect(errorMessage({ kind: "notFound" })).toBe("tsk was not found");
-    expect(errorMessage({ kind: "store", message: "x" })).toBe(
-      "tsk could not save; the board was re-read",
-    );
+  });
+
+  it("maps timeout to text with the seconds", () => {
+    expect(errorMessage({ kind: "timeout", seconds: 60 })).toBe("tsk didn't finish within 60 seconds.");
+  });
+
+  it("shows tsk's message for a store error", () => {
+    expect(errorMessage({ kind: "store", message: "the store is locked" })).toBe("the store is locked");
   });
 
   it("returns a string rejection unchanged", () => {

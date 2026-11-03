@@ -144,21 +144,25 @@ pub fn list_args(scope: &Scope, options: &ListOptions) -> Vec<String> {
     }
     // tsk refuses --group and --sort on the done and archived shelves.
     if options.shelf == Shelf::Live {
-        push_group_and_sort(&mut args, options);
+        // tsk accepts a project group or sort only together with --all.
+        let spans_projects = !matches!(scope, Scope::Desk | Scope::Project { .. });
+        push_group_and_sort(&mut args, options, spans_projects);
     }
     args.push("--json".into());
     args
 }
 
-fn push_group_and_sort(args: &mut Vec<String>, options: &ListOptions) {
+fn push_group_and_sort(args: &mut Vec<String>, options: &ListOptions, spans_projects: bool) {
     match options.group {
         Group::None => {}
+        Group::Project if !spans_projects => {}
         Group::Project => args.push("--group=project".into()),
         Group::Thread => args.push("--group=thread".into()),
         Group::Assignee => args.push("--group=assignee".into()),
     }
     match options.sort {
         Sort::Recent => {}
+        Sort::Project if !spans_projects => {}
         Sort::Project => args.push("--sort=project".into()),
         Sort::Thread => args.push("--sort=thread".into()),
         Sort::Title => args.push("--sort=title".into()),
@@ -404,6 +408,67 @@ mod tests {
         assert_eq!(
             list_args(&Scope::All, &o),
             s(&["list", "--all", "--done", "--json"])
+        );
+    }
+
+    #[test]
+    fn project_group_and_sort_need_the_all_scope() {
+        let o = ListOptions {
+            shelf: Shelf::Live,
+            group: Group::Project,
+            sort: Sort::Project,
+        };
+        assert_eq!(
+            list_args(&Scope::Desk, &o),
+            s(&["list", "--desk", "--json"])
+        );
+        assert_eq!(
+            list_args(
+                &Scope::Project {
+                    path: "/home/test/site".into()
+                },
+                &o
+            ),
+            s(&["list", "--project=/home/test/site", "--json"])
+        );
+        assert_eq!(
+            list_args(&Scope::All, &o),
+            s(&[
+                "list",
+                "--all",
+                "--group=project",
+                "--sort=project",
+                "--json"
+            ])
+        );
+        assert_eq!(
+            list_args(
+                &Scope::Thread {
+                    name: "auth".into()
+                },
+                &o
+            ),
+            s(&[
+                "list",
+                "--all",
+                "--thread=auth",
+                "--group=project",
+                "--sort=project",
+                "--json"
+            ])
+        );
+    }
+
+    #[test]
+    fn other_group_and_sort_stay_on_a_single_project_scope() {
+        let o = ListOptions {
+            shelf: Shelf::Live,
+            group: Group::Thread,
+            sort: Sort::Title,
+        };
+        assert_eq!(
+            list_args(&Scope::Desk, &o),
+            s(&["list", "--desk", "--group=thread", "--sort=title", "--json"])
         );
     }
 

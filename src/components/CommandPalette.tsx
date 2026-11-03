@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type { Handlers } from "../keys/useKeymap";
 import type { ActionId } from "../keys/actions";
 import { ACTIONS } from "../keys/actions";
@@ -6,6 +6,7 @@ import { formatBindings } from "../keys/format";
 import type { Keymap } from "../keys/keymap";
 import { isMacPlatform } from "../keys/keymap";
 import { Modal } from "./Modal";
+import { SymbolIcon } from "./SymbolIcon";
 
 /**
  * Lists the actions that have a handler in the current context and runs the chosen one. `labels`
@@ -29,6 +30,15 @@ export function CommandPalette(props: {
     );
   }, [handlers, labels, filter]);
   const active = Math.min(selected, Math.max(entries.length - 1, 0));
+  const prefix = useId();
+  const listId = `${prefix}-actions`;
+  const optionId = (index: number) => `${prefix}-option-${index}`;
+  const expanded = entries.length > 0;
+
+  useEffect(() => {
+    if (!expanded) return;
+    document.getElementById(`${prefix}-option-${active}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [active, expanded, prefix]);
 
   function run(index: number) {
     const entry = entries[index];
@@ -58,35 +68,45 @@ export function CommandPalette(props: {
 
   return (
     <Modal label="Command Palette" className="palette" onClose={onClose}>
-      <input
-        role="combobox"
-        aria-expanded="true"
-        aria-controls="palette-actions"
-        aria-label="Search actions"
-        placeholder="Type an action"
-        value={filter}
-        onChange={(e) => {
-          setFilter(e.target.value);
-          setSelected(0);
-        }}
-        onKeyDown={onKeyDown}
-      />
-      <ul id="palette-actions" role="listbox" aria-label="Actions">
-        {entries.map((entry, index) => (
-          <li
-            key={entry.id}
-            role="option"
-            aria-selected={index === active}
-            className={index === active ? "is-active" : undefined}
-            onMouseEnter={() => setSelected(index)}
-            onClick={() => run(index)}
-          >
-            <span>{entry.label}</span>
-            <kbd>{formatBindings(keymap[entry.id], isMac)}</kbd>
-          </li>
-        ))}
-        {entries.length === 0 && <li className="palette-empty">No matching action</li>}
-      </ul>
+      <div className="search-field">
+        <SymbolIcon name="magnifyingglass-large" />
+        <input
+          type="search"
+          role="combobox"
+          aria-expanded={expanded}
+          aria-controls={expanded ? listId : undefined}
+          aria-activedescendant={expanded ? optionId(active) : undefined}
+          aria-autocomplete="list"
+          aria-label="Search actions"
+          placeholder="Type an action"
+          value={filter}
+          onChange={(e) => {
+            setFilter(e.target.value);
+            setSelected(0);
+          }}
+          onKeyDown={onKeyDown}
+        />
+      </div>
+      {expanded ? (
+        <ul id={listId} role="listbox" aria-label="Actions">
+          {entries.map((entry, index) => (
+            <li
+              key={entry.id}
+              id={optionId(index)}
+              role="option"
+              aria-selected={index === active}
+              className={index === active ? "is-active" : undefined}
+              onMouseEnter={() => setSelected(index)}
+              onClick={() => run(index)}
+            >
+              <span>{entry.label}</span>
+              <kbd>{formatBindings(keymap[entry.id], isMac)}</kbd>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="palette-empty">No matching action</p>
+      )}
     </Modal>
   );
 }

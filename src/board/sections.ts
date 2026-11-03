@@ -18,6 +18,7 @@ export function sectionOf(row: TaskRow, liveNumbers: ReadonlySet<number>): Secti
       return "inMotion";
     case "ready":
     case "open":
+    case "unknown":
       return "onDeck";
     case "done":
       return "done";
@@ -38,10 +39,10 @@ export function buildBoard(rows: TaskRow[], liveNumbers: ReadonlySet<number>): B
         board.inMotion.push(row);
         break;
       case "onDeck":
-        if (row.status === "open") {
-          board.inbox.push(row);
-        } else {
+        if (row.status === "ready") {
           board.ready.push(row);
+        } else {
+          board.inbox.push(row);
         }
         break;
       default:

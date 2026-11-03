@@ -83,3 +83,33 @@ describe("New Task sheet", () => {
     expect(within(sheet).getByRole("textbox", { name: "Notes" }).previousElementSibling).toHaveClass("form-label");
   });
 });
+
+describe("Assign sheet", () => {
+  it("submits the typed name without surrounding spaces", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<AssignDialog count={2} onSubmit={onSubmit} onClose={() => {}} />);
+    await user.type(screen.getByRole("combobox", { name: /Assign 2 tasks to/ }), "  builder  {Enter}");
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit).toHaveBeenCalledWith("builder");
+  });
+
+  it("unassigns with an empty name", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<AssignDialog count={1} onSubmit={onSubmit} onClose={() => {}} />);
+    expect(screen.getByRole("combobox", { name: /Assign 1 task to \(empty to unassign\)/ })).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Assign" }));
+    expect(onSubmit).toHaveBeenCalledWith("");
+  });
+
+  it("closes from Cancel without submitting", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    const onClose = vi.fn();
+    render(<AssignDialog count={1} onSubmit={onSubmit} onClose={onClose} />);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});

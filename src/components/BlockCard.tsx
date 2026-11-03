@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TaskDetail } from "../api/types";
 import { inputToOn, onToInput } from "../board/waits";
 import type { WaitsKind } from "../board/waits";
 import { useDeck } from "../state/store";
+import { lines } from "./lines";
 import { PopUp } from "./PopUp";
 
 /**
@@ -61,18 +62,13 @@ export function WaitsOn(props: {
   );
 }
 
-/** Escape in a card field hands the keyboard back to the task pane and keeps what was typed. */
-export function leaveFieldOnEscape(e: React.KeyboardEvent<HTMLFormElement>) {
-  if (e.key !== "Escape") return;
-  e.stopPropagation();
-  e.currentTarget.closest<HTMLElement>(".task-pane")?.focus();
-}
-
-function lines(text: string): string[] {
-  return text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l !== "");
+/** Escape anywhere in a card closes it, as Cancel does, and stays out of the task view's keys. */
+export function closeOnEscape(onClose: () => void) {
+  return (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key !== "Escape") return;
+    e.stopPropagation();
+    onClose();
+  };
 }
 
 /** Form that sets a task blocked. */
@@ -83,31 +79,40 @@ export function BlockCard(props: { task: TaskDetail; onClose: () => void }) {
   const [needs, setNeeds] = useState(task.block?.needs ?? "");
   const [options, setOptions] = useState((task.block?.options ?? []).join("\n"));
   const [on, setOn] = useState<string | null>(null);
+  const form = useRef<HTMLFormElement>(null);
 
-  function submit() {
+  useEffect(() => {
+    form.current?.querySelector<HTMLElement>("textarea, input")?.focus();
+  }, []);
+
+  /** Writes the block and closes the card once the write succeeded. */
+  async function submit() {
+    const trimmedWhy = why.trim();
+    const trimmedNeeds = needs.trim();
     const change = {
       kind: "blocked" as const,
-      why: why.trim() === "" ? null : why.trim(),
-      needs: needs.trim() === "" ? null : needs.trim(),
+      why: trimmedWhy === "" ? null : trimmedWhy,
+      needs: trimmedNeeds === "" ? null : trimmedNeeds,
       options: lines(options),
       on,
     };
-    props.onClose();
-    void run(
+    const written = await run(
       { kind: "status", number: task.number, change },
       { kind: "status", number: task.number, from: task.status, to: "blocked", dispatched: false },
       "Block",
     );
+    if (written) props.onClose();
   }
 
   return (
     <form
+      ref={form}
       className="card group-box"
       aria-label="Block"
-      onKeyDown={leaveFieldOnEscape}
+      onKeyDown={closeOnEscape(props.onClose)}
       onSubmit={(e) => {
         e.preventDefault();
-        submit();
+        void submit();
       }}
     >
       <h3 className="group-box-title">Block</h3>

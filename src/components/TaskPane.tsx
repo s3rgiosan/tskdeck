@@ -13,6 +13,7 @@ import { useKeymap } from "../keys/useKeymap";
 import { useDeck } from "../state/store";
 import { dateOf, formatWhen } from "../when";
 import { BlockCard } from "./BlockCard";
+import { Clamp } from "./Clamp";
 import { STATUS_LABELS } from "./Board";
 import { Loading } from "./Loading";
 import { ReviewCard } from "./ReviewCard";
@@ -36,7 +37,10 @@ function onArg(stored: string | null): string | null {
   return inputToOn(kind, value);
 }
 
-/** Text that turns into an input on click and saves on Enter or blur; Escape cancels. */
+/**
+ * Text that turns into an input on click, Enter or Space and saves on Enter or blur; Escape cancels.
+ * The edit button takes the keyboard back when the editor closes while holding it.
+ */
 function InlineText(props: {
   label: string;
   value: string;
@@ -50,10 +54,20 @@ function InlineText(props: {
   const [local, setLocal] = useState(false);
   const editing = props.editing ?? local;
   const settled = useRef(false);
+  const button = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef(false);
 
   useEffect(() => {
-    if (editing) settled.current = false;
+    if (editing) {
+      settled.current = false;
+      return;
+    }
+    if (returnFocus.current) {
+      returnFocus.current = false;
+      button.current?.focus();
+    }
   }, [editing]);
+
 
   function setEditing(next: boolean) {
     settled.current = !next;
@@ -61,8 +75,9 @@ function InlineText(props: {
     props.onEditing?.(next);
   }
 
-  function commit(value: string) {
+  function commit(value: string, returnTo = false) {
     if (settled.current) return;
+    returnFocus.current = returnTo;
     settled.current = true;
     setLocal(false);
     props.onEditing?.(false);
@@ -72,13 +87,14 @@ function InlineText(props: {
   if (!editing) {
     return (
       <div
+        ref={button}
         className={`inline ${props.className ?? ""}`}
         role="button"
         tabIndex={0}
         aria-label={`Edit ${props.label.toLowerCase()}: ${props.value}`}
         onClick={() => setEditing(true)}
         onKeyDown={(e) => {
-          if (e.key !== "Enter") return;
+          if (e.key !== "Enter" && e.key !== " ") return;
           e.preventDefault();
           setEditing(true);
         }}
@@ -92,16 +108,18 @@ function InlineText(props: {
     className: props.className,
     autoFocus: true,
     defaultValue: props.value,
-    onBlur: (e: { currentTarget: { value: string } }) => commit(e.currentTarget.value),
+    onBlur: (e: { currentTarget: { value: string }; relatedTarget: EventTarget | null }) =>
+      commit(e.currentTarget.value, e.relatedTarget === null),
     onKeyDown: (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       if (e.key === "Escape") {
         e.stopPropagation();
+        returnFocus.current = e.currentTarget === document.activeElement;
         settled.current = true;
         setLocal(false);
         props.onEditing?.(false);
       } else if (e.key === "Enter" && (!props.multiline || e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        commit(e.currentTarget.value);
+        commit(e.currentTarget.value, e.currentTarget === document.activeElement);
       }
     },
   };
@@ -367,7 +385,8 @@ function RunsAfter(props: { task: TaskDetail }) {
         </button>
       ))}
       <PullDown
-        label="Add Dependency…"
+        label={task.after.length === 0 ? "Add Runs After" : "Add Dependency…"}
+        text={task.after.length === 0 ? "Add…" : undefined}
         symbol="plus-small"
         items={choices.map((r) => ({ id: `${AFTER_PREFIX}${r.number}`, title: `T${r.number} ${r.title}` }))}
       />
@@ -416,6 +435,7 @@ export function TaskPane() {
   }, [allRows, task, settings.projectNames]);
 
   const [editingTitle, setEditingTitle] = useState(false);
+  const [editingNotes, setEditingNotes] = useState(false);
   const [card, setCard] = useState<Card>(null);
   const [threadFocused, setThreadFocused] = useState(false);
   const [editingWaits, setEditingWaits] = useState(false);
@@ -429,11 +449,27 @@ export function TaskPane() {
   const focus = useDeck((s) => s.focus);
   const modalOpen = useDeck((s) => s.modalOpen);
 
+  // The pane control that held the keyboard when a card opened; closing the card hands it back.
+  const cardOpener = useRef<HTMLElement | null>(null);
+
+  function openCard(next: Exclude<Card, null>) {
+    const active = document.activeElement;
+    cardOpener.current = active instanceof HTMLElement && paneRef.current?.contains(active) ? active : null;
+    setCard(next);
+  }
+
+  function closeCard() {
+    const opener = cardOpener.current;
+    cardOpener.current = null;
+    setCard(null);
+    (opener?.isConnected ? opener : paneRef.current)?.focus();
+  }
+
   const inTask = task !== null && task.number === openTask;
   const pendingCard = useDeck((s) => s.pendingCard);
   useEffect(() => {
     if (pendingCard === null || !inTask) return;
-    setCard(pendingCard);
+    openCard(pendingCard);
     useDeck.setState({ pendingCard: null });
   }, [pendingCard, inTask]);
   const block = inTask && task.status === "blocked" ? task.block : null;
@@ -537,8 +573,8 @@ export function TaskPane() {
     "status.ready": when_(() => change({ kind: "ready" }, "Mark Ready")),
     "status.open": when_(() => change({ kind: "open" }, "Reopen")),
     "status.done": when_(() => change({ kind: "done", clean: false }, "Mark Done")),
-    "status.block": when_(() => setCard("block")),
-    "status.review": when_(() => setCard("review")),
+    "status.block": when_(() => openCard("block")),
+    "status.review": when_(() => openCard("review")),
     archive: when_(archive),
     reply: when_(openReply),
     assign: when_(() => assigneeRef.current?.focus()),
@@ -561,10 +597,10 @@ export function TaskPane() {
   usePullDownChoice((id) => {
     switch (id) {
       case "pane-block":
-        setCard("block");
+        openCard("block");
         break;
       case "pane-review":
-        setCard("review");
+        openCard("review");
         break;
       case "pane-start-quiet":
         change(START_QUIET, "Start");
@@ -639,8 +675,7 @@ export function TaskPane() {
         // Escape closes an open block or review card before it closes the task.
         if (e.key !== "Escape" || card === null) return;
         e.stopPropagation();
-        paneRef.current?.focus();
-        setCard(null);
+        closeCard();
       }}
       onBlur={(e) => {
         const deck = useDeck.getState();
@@ -674,20 +709,24 @@ export function TaskPane() {
             )
           }
         />
-        <InlineText
-          label="Notes"
-          className="pane-notes"
-          multiline
-          placeholder="Add notes"
-          value={task.notes ?? ""}
-          onSave={(notes) =>
-            void run(
-              { kind: "edit", number: task.number, input: { notes } },
-              { kind: "edit", number: task.number, before: { notes: task.notes ?? "" }, after: { notes } },
-              "Edit Notes",
-            )
-          }
-        />
+        <Clamp className="pane-notes-block" disabled={editingNotes}>
+          <InlineText
+            label="Notes"
+            className="pane-notes"
+            multiline
+            placeholder="Add notes"
+            value={task.notes ?? ""}
+            editing={editingNotes}
+            onEditing={setEditingNotes}
+            onSave={(notes) =>
+              void run(
+                { kind: "edit", number: task.number, input: { notes } },
+                { kind: "edit", number: task.number, before: { notes: task.notes ?? "" }, after: { notes } },
+                "Edit Notes",
+              )
+            }
+          />
+        </Clamp>
       </header>
 
       <dl className="fields">
@@ -699,13 +738,13 @@ export function TaskPane() {
                 {STATUS_LABELS[status]}
               </option>
             ))}
-            {(task.status === "blocked" || task.status === "review") && (
+            {(task.status === "blocked" || task.status === "review" || task.status === "unknown") && (
               <option value={task.status} disabled>
                 {STATUS_LABELS[task.status]}
               </option>
             )}
           </PopUp>
-          <PullDown label="Actions" symbol="ellipsis-circle" items={statusActions} />
+          <PullDown label="Actions" title="More" symbol="ellipsis-circle" items={statusActions} />
           {offerRefusal()}
         </dd>
         <dt>Assignee</dt>
@@ -734,8 +773,8 @@ export function TaskPane() {
         </dd>
       </dl>
 
-      {card === "block" && <BlockCard task={task} onClose={() => setCard(null)} />}
-      {card === "review" && <ReviewCard task={task} onClose={() => setCard(null)} />}
+      {card === "block" && <BlockCard task={task} onClose={closeCard} />}
+      {card === "review" && <ReviewCard task={task} onClose={closeCard} />}
 
       {canReply && (
         <ThreadView
@@ -748,6 +787,7 @@ export function TaskPane() {
           busy={busy}
           editingWaits={editingWaits}
           onEditWaits={() => setEditingWaits(true)}
+          onCancelWaits={() => setEditingWaits(false)}
           onSaveWaits={saveWaits}
           onFocusChange={setThreadFocused}
         />

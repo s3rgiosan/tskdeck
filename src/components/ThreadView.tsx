@@ -1,9 +1,10 @@
-import { forwardRef, useState } from "react";
+import { forwardRef, useRef, useState } from "react";
 import type { Block, Check, CheckState, Reply, Review, TaskDetail } from "../api/types";
 import { formatBinding } from "../keys/format";
 import { isMacPlatform } from "../keys/keymap";
 import { dateOf, formatWhen } from "../when";
 import { WaitsOn } from "./BlockCard";
+import { Clamp } from "./Clamp";
 
 function Replies(props: { items: Reply[] }) {
   if (props.items.length === 0) return null;
@@ -28,12 +29,20 @@ function BlockBody(props: { block: Block; onPick: (text: string) => void }) {
   const { block } = props;
   return (
     <>
-      {block.why && <p>{block.why}</p>}
-      {block.needs && <p className="muted">Needs: {block.needs}</p>}
+      {block.why && (
+        <Clamp>
+          <p>{block.why}</p>
+        </Clamp>
+      )}
+      {block.needs && (
+        <Clamp>
+          <p className="muted">Needs: {block.needs}</p>
+        </Clamp>
+      )}
       {block.options.length > 0 && (
         <ol className="options">
           {block.options.map((option, i) => (
-            <li key={option}>
+            <li key={`${i}-${option}`}>
               <button type="button" onClick={() => props.onPick(option)}>
                 <kbd>{i + 1}</kbd>
                 {option}
@@ -47,7 +56,7 @@ function BlockBody(props: { block: Block; onPick: (text: string) => void }) {
   );
 }
 
-const CHECK_LABELS: Record<CheckState, string> = { open: "Open", passed: "Passed", failed: "Failed" };
+const CHECK_LABELS: Record<CheckState, string> = { open: "Open", passed: "Passed", failed: "Failed", unknown: "Unknown" };
 
 /** The key that sends a reply: ⌘Return on macOS, Ctrl+Enter elsewhere. Return inserts a new line. */
 const SEND_BINDING = "mod+enter";
@@ -56,8 +65,8 @@ function Checks(props: { items: Check[] }) {
   if (props.items.length === 0) return null;
   return (
     <ul className="checks">
-      {props.items.map((c) => (
-        <li key={c.text}>
+      {props.items.map((c, i) => (
+        <li key={`${i}-${c.text}`}>
           <span className={`badge badge-${c.state}`}>{CHECK_LABELS[c.state] ?? c.state}</span>
           <span>{c.text}</span>
         </li>
@@ -101,10 +110,42 @@ interface ThreadViewProps {
   onSaveWaits?: (on: string) => void;
   editingWaits?: boolean;
   onEditWaits: () => void;
+  /** Closes the "waits on" editor without saving. */
+  onCancelWaits?: () => void;
   onFocusChange?: (focused: boolean) => void;
   busy?: boolean;
   /** The focusable thread region, where the block and review keys apply. */
   regionRef?: React.Ref<HTMLElement>;
+}
+
+/** Picks a new "waits on"; it is mounted only while editing, so each opening starts from the saved value. */
+function WaitsEditor(props: {
+  value: string;
+  allowTask: boolean;
+  exclude: number;
+  onSave?: (on: string) => void;
+  onCancel?: () => void;
+}) {
+  const { value, allowTask, exclude, onSave, onCancel } = props;
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <div
+      className="waits-edit"
+      onKeyDown={(e) => {
+        if (e.key !== "Escape") return;
+        e.stopPropagation();
+        onCancel?.();
+      }}
+    >
+      <WaitsOn value={value} allowTask={allowTask} exclude={exclude} onChange={setDraft} />
+      <button type="button" onClick={onCancel}>
+        Cancel
+      </button>
+      <button type="button" disabled={draft === null} onClick={() => draft && onSave?.(draft)}>
+        Save
+      </button>
+    </div>
+  );
 }
 
 /** The open block or review, or a plain reply box, with the reply field. */
@@ -112,7 +153,7 @@ export const ThreadView = forwardRef<HTMLTextAreaElement, ThreadViewProps>(funct
   const { task } = props;
   const block = task.status === "blocked" ? task.block : null;
   const review = task.status === "review" ? task.review : null;
-  const [waitsDraft, setWaitsDraft] = useState<string | null>(null);
+  const change = useRef<HTMLButtonElement>(null);
   const label = block ? "Blocked" : review ? "In Review" : "Reply";
   const submitLabel = review ? "Send Back" : block ? "Answer" : "Reply";
   const waiting = block ?? review;
@@ -138,19 +179,23 @@ export const ThreadView = forwardRef<HTMLTextAreaElement, ThreadViewProps>(funct
         {waiting && (
           <span className="waits-line">
             Waiting on {waiting.on} ·{" "}
-            <button type="button" className="link-button" onClick={props.onEditWaits}>
+            <button ref={change} type="button" className="link-button" onClick={props.onEditWaits}>
               Change
             </button>
           </span>
         )}
       </div>
       {props.editingWaits && waiting && (
-        <div className="waits-edit">
-          <WaitsOn value={waiting.on} allowTask={block !== null && block !== undefined} exclude={task.number} onChange={setWaitsDraft} />
-          <button type="button" disabled={waitsDraft === null} onClick={() => waitsDraft && props.onSaveWaits?.(waitsDraft)}>
-            Save
-          </button>
-        </div>
+        <WaitsEditor
+          value={waiting.on}
+          allowTask={block !== null}
+          exclude={task.number}
+          onSave={props.onSaveWaits}
+          onCancel={() => {
+            props.onCancelWaits?.();
+            change.current?.focus();
+          }}
+        />
       )}
       {block && <BlockBody block={block} onPick={props.onDraft} />}
       {review && <ReviewBody review={review} earlier={task.past_reviews ?? []} />}

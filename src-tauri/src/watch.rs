@@ -37,13 +37,38 @@ pub fn watch_store(
     Ok(debouncer)
 }
 
+/// Identifies a directory so a deleted and recreated one differs from the original:
+/// device and inode on Unix, creation time elsewhere.
+#[cfg(unix)]
+type DirId = (u64, u64);
+#[cfg(not(unix))]
+type DirId = Option<std::time::SystemTime>;
+
+#[cfg(unix)]
+fn dir_id(dir: &Path) -> Option<DirId> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = std::fs::metadata(dir).ok()?;
+    Some((meta.dev(), meta.ino()))
+}
+
+#[cfg(not(unix))]
+fn dir_id(dir: &Path) -> Option<DirId> {
+    let meta = std::fs::metadata(dir).ok()?;
+    Some(meta.created().ok())
+}
+
+struct Running {
+    _debouncer: Debouncer<RecommendedWatcher>,
+    id: DirId,
+}
+
 /// Watches the store directory once it exists. A store directory that is missing
 /// at launch, or removed and created again, is picked up by a later `ensure`, for
 /// example after the next tsk command creates it.
 pub struct StoreWatcher {
     dir: Option<PathBuf>,
     on_change: Arc<dyn Fn() + Send + Sync>,
-    watcher: Mutex<Option<Debouncer<RecommendedWatcher>>>,
+    watcher: Mutex<Option<Running>>,
 }
 
 impl StoreWatcher {
@@ -66,7 +91,16 @@ impl StoreWatcher {
             return false;
         };
         let on_change = Arc::clone(&self.on_change);
-        *guard = watch_store(dir, move || on_change()).ok();
+        // The identity is read before the watch starts, so a directory swapped in
+        // between is seen as changed by the next check.
+        let id = dir_id(dir);
+        *guard = id.and_then(|id| {
+            let debouncer = watch_store(dir, move || on_change()).ok()?;
+            Some(Running {
+                _debouncer: debouncer,
+                id,
+            })
+        });
         guard.is_some()
     }
 
@@ -75,12 +109,14 @@ impl StoreWatcher {
         self.keep_live(&mut guard)
     }
 
-    /// Whether the watch is running on a directory that still exists. A watch whose
-    /// directory is gone is dropped, so `ensure` can watch the directory once it is
-    /// created again.
-    fn keep_live(&self, watcher: &mut Option<Debouncer<RecommendedWatcher>>) -> bool {
-        let dir_exists = self.dir.as_deref().is_some_and(Path::is_dir);
-        if !dir_exists {
+    /// Whether the watch is running on the directory it started on. A watch whose
+    /// directory is gone, or was deleted and created again, is dropped, so `ensure`
+    /// can watch the new directory.
+    fn keep_live(&self, watcher: &mut Option<Running>) -> bool {
+        let current = self.dir.as_deref().and_then(dir_id);
+        let same =
+            matches!((watcher.as_ref(), current), (Some(running), Some(id)) if running.id == id);
+        if !same {
             *watcher = None;
         }
         watcher.is_some()
@@ -150,6 +186,24 @@ mod tests {
             std::thread::sleep(Duration::from_millis(50));
         }
         assert!(count.load(Ordering::SeqCst) >= 1);
+    }
+
+    #[test]
+    fn a_recreated_directory_is_not_the_one_being_watched() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("store");
+        std::fs::create_dir(&dir).unwrap();
+        let watcher = StoreWatcher::new(Some(dir.clone()), || {});
+        assert!(watcher.ensure());
+        assert!(watcher.is_running());
+
+        // A directory made in between takes over the freed inode on filesystems that reuse them.
+        std::fs::remove_dir(&dir).unwrap();
+        std::fs::create_dir(tmp.path().join("other")).unwrap();
+        std::fs::create_dir(&dir).unwrap();
+        assert!(!watcher.is_running());
+        assert!(watcher.ensure());
+        assert!(watcher.is_running());
     }
 
     #[test]

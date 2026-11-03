@@ -9,7 +9,7 @@ export const DEFAULT_KEYMAP: Keymap = {
   "nav.up": ["k", "arrowup"],
   "task.open": ["enter", "l", "arrowright"],
   "task.close": ["escape", "h", "arrowleft"],
-  capture: ["+", "mod+n"],
+  capture: ["+"],
   "edit.title": ["ctrl+e"],
   "status.start": ["ctrl+s", "mod+l"],
   "status.ready": ["ctrl+n"],
@@ -31,7 +31,7 @@ export const DEFAULT_KEYMAP: Keymap = {
   "focus.threads": ["t"],
   "focus.assignees": ["a"],
   "focus.toggle": ["ctrl+tab"],
-  search: ["/", "mod+f"],
+  search: ["/"],
   palette: [":", "mod+k"],
   "mark.mode": ["shift+m"],
   "mark.toggle": ["space"],
@@ -54,23 +54,35 @@ export const DEFAULT_KEYMAP: Keymap = {
   "review.sendBack": ["ctrl+s"],
   settings: ["mod+,"],
   "sidebar.toggle": ["ctrl+meta+s", "ctrl+alt+s"],
+  "zoom.in": [],
+  "zoom.out": [],
+  "zoom.reset": [],
+  "help.docs": [],
 };
 
 /**
  * Keys added on macOS. Their Ctrl form is taken elsewhere: by tsk's own chords (Ctrl+O, Ctrl+D,
- * Ctrl+R) or by Redo on Windows (Ctrl+Y).
+ * Ctrl+R, Ctrl+F, Ctrl+N) or by Redo on Windows (Ctrl+Y).
  */
 const MAC_KEYMAP: Partial<Keymap> = {
   "task.open": ["mod+o"],
+  capture: ["mod+n"],
+  search: ["mod+f"],
   "status.ready": ["mod+y"],
   "status.done": ["mod+d"],
   "status.review": ["mod+r"],
 };
 
-/** Keys added off macOS, where Ctrl+Shift chords are free for these actions. */
+/**
+ * Keys added off macOS, where Ctrl+Shift chords are free for these actions. Zoom has its keys here
+ * only: on macOS the View menu zooms.
+ */
 const OTHER_KEYMAP: Partial<Keymap> = {
   "status.block": ["mod+shift+b"],
   archive: ["mod+shift+e"],
+  "zoom.in": ["mod+="],
+  "zoom.out": ["mod+-"],
+  "zoom.reset": ["mod+0"],
 };
 
 /** The default keymap for the platform: the shared keys, plus the macOS or the other platforms' ones. */

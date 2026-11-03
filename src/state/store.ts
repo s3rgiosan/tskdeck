@@ -35,11 +35,15 @@ export interface DeckState {
   tsk: TskInfo | null;
   tskError: TskError | null;
   settings: Settings;
+  /** True once `settings` holds what the settings file holds; saves read the file first while false. */
+  settingsLoaded: boolean;
   scope: Scope;
   lastProject: Scope | null;
   options: ListOptions;
   allRows: TaskRow[];
   rows: TaskRow[];
+  /** The current scope's rows as the last listing returned them, before any optimistic change. */
+  listedRows: TaskRow[];
   /** True once the first listing has arrived. */
   loaded: boolean;
   /** Number of the task under the cursor. */
@@ -81,8 +85,10 @@ export interface DeckState {
    */
   select: (number: number) => void;
   close: () => void;
-  run: (cmd: Command, change: Change, label: string) => Promise<void>;
-  runBulk: (cmds: Command[], changes: Change[], label: string) => Promise<void>;
+  /** Resolves to true when tsk wrote the change, false when tsk refused it or the write failed. */
+  run: (cmd: Command, change: Change, label: string) => Promise<boolean>;
+  /** Resolves to true when tsk wrote every change, false when any of them was refused or failed. */
+  runBulk: (cmds: Command[], changes: Change[], label: string) => Promise<boolean>;
   undoLast: () => Promise<void>;
   capture: (input: CaptureInput) => Promise<number | null>;
   setQuery: (query: string) => void;
@@ -170,6 +176,36 @@ function kindOf(e: unknown): string | null {
   return typeof e === "object" && e !== null && "kind" in e ? String((e as { kind: unknown }).kind) : null;
 }
 
+/** A failed write's text: tsk's message, followed by a note that the board was re-read when tsk could not save. */
+function writeFailureText(e: unknown): string {
+  const kind = kindOf(e);
+  const message = messageOf(e);
+  return kind === "store" ? `${message}; the board was re-read` : message;
+}
+
+/** The index without the entries of `numbers`, so those tasks are read again before a search matches them. */
+function withoutEntries(index: Map<number, SearchDoc>, numbers: number[]): Map<number, SearchDoc> {
+  if (!numbers.some((n) => index.has(n))) return index;
+  const next = new Map(index);
+  for (const n of numbers) next.delete(n);
+  return next;
+}
+
+/** The marks whose task is among `visible`. */
+function marksIn(marks: number[], visible: TaskRow[]): number[] {
+  const shown = new Set(visible.map((r) => r.number));
+  const kept = marks.filter((n) => shown.has(n));
+  return kept.length === marks.length ? marks : kept;
+}
+
+/** `current` with the fields `edited` changes relative to `base`, the settings `edited` was made from. */
+function changedOnto(base: Settings, edited: Settings, current: Settings): Settings {
+  const changed = Object.fromEntries(
+    Object.entries(edited).filter(([key, value]) => value !== base[key as keyof Settings]),
+  ) as Partial<Settings>;
+  return { ...current, ...changed };
+}
+
 function execute(cmd: Command): Promise<void> {
   switch (cmd.kind) {
     case "status":
@@ -193,6 +229,10 @@ function finishesOpenTask(cmd: Command, openTask: number | null): boolean {
 /** Keeps a slow listing from overwriting a newer one. */
 let refreshSeq = 0;
 let subscribing = false;
+/** True while an undo runs; a second undo meanwhile is ignored. */
+let undoing = false;
+/** Serialises settings saves so each one starts from the settings the previous one saved. */
+let settingsSaving: Promise<unknown> = Promise.resolve();
 let unlisten: (() => void) | null = null;
 /** Re-reads the board when the window regains focus, which also lets tskdeck watch a store folder created meanwhile. */
 let onWindowFocus: (() => void) | null = null;
@@ -238,6 +278,51 @@ function recordStepId(change: Change, cmd: Command, before: Step[] | null, after
   return { ...change, before: { ...change.before, newId: added[0].short_id } };
 }
 
+/**
+ * Makes sure `settings` holds the file's settings: when the first read failed, reads the file again.
+ * Returns false, with the failure set, when the file still cannot be read.
+ */
+async function ensureSettings(set: Set_, get: Get_): Promise<boolean> {
+  if (get().settingsLoaded) return true;
+  try {
+    const settings = await api.getSettings();
+    set({ settings, settingsLoaded: true });
+    return true;
+  } catch (e) {
+    set(failure("Settings couldn't be saved", messageOf(e)));
+    return false;
+  }
+}
+
+/** Saves the settings `build` makes from the current ones, once every earlier save has finished. */
+function queueSave(set: Set_, get: Get_, build: (current: Settings) => Settings): Promise<void> {
+  const saving = settingsSaving.then(async () => {
+    const ready = await ensureSettings(set, get);
+    if (!ready) return;
+    const next = build(get().settings);
+    try {
+      await api.saveSettings(next);
+      set({ settings: next });
+    } catch (e) {
+      set(failure("Settings couldn't be saved", messageOf(e)));
+    }
+  });
+  settingsSaving = saving;
+  return saving;
+}
+
+/** Reads the open task again after a listing; a failure belongs to that task. */
+async function rereadOpenTask(set: Set_, get: Get_, seq: number, number: number): Promise<void> {
+  try {
+    const detail = await api.getTask(number);
+    const current = get().openTask;
+    if (seq === refreshSeq && current === number) set({ detail });
+  } catch (e) {
+    const current = get().openTask;
+    if (seq === refreshSeq && current === number) set(failure(`T${number} couldn't be opened`, messageOf(e), number));
+  }
+}
+
 /** Serialises index fills so overlapping calls never fetch the same task twice. A cleared index drops fetches still in flight. */
 let indexing: Promise<void> = Promise.resolve();
 async function fillIndex(set: Set_, get: Get_): Promise<void> {
@@ -275,11 +360,13 @@ export const useDeck = create<DeckState>()((set, get) => ({
   tsk: null,
   tskError: null,
   settings: { openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {} },
+  settingsLoaded: false,
   scope: { kind: "desk" },
   lastProject: null,
   options: LIVE,
   allRows: [],
   rows: [],
+  listedRows: [],
   loaded: false,
   cursor: null,
   pendingCursor: null,
@@ -311,7 +398,7 @@ export const useDeck = create<DeckState>()((set, get) => ({
           return null;
         }),
       ]);
-      if (settings) set({ settings });
+      if (settings) set({ settings, settingsLoaded: true });
       if (tsk) set({ tsk });
       if (!tsk || !tsk.supported) return;
       await get().refresh();
@@ -345,25 +432,28 @@ export const useDeck = create<DeckState>()((set, get) => ({
       const [allRows, listed] = await Promise.all([all, listBoard(scope, options, all)]);
       if (seq !== refreshSeq) return;
       const rows = listedOrder(listed, options, allRows, get().settings.projectNames);
-      const { cursor, pendingCursor, openTask, query, searchIndex } = get();
-      const before = boardOrder(get().visibleRows(), get().allRows);
-      const after = boardOrder(filterRows(rows, query, searchIndex), allRows);
+      const { cursor, pendingCursor, openTask, query, searchIndex, marks } = get();
+      // The board as last listed: an optimistic write may already have taken the cursor task off `rows`.
+      const before = boardOrder(filterRows(get().listedRows, query, searchIndex), get().allRows);
+      const visible = filterRows(rows, query, searchIndex);
+      const after = boardOrder(visible, allRows);
       const captured = pendingCursor !== null && after.some((r) => r.number === pendingCursor);
       set({
         allRows,
         rows,
+        listedRows: rows,
         loaded: true,
         cursor: captured ? pendingCursor : keepCursor(cursor, before, after),
         pendingCursor: null,
+        marks: marksIn(marks, visible),
       });
-      if (get().query.trim() !== "") void get().ensureSearchIndex();
-      if (openTask !== null) {
-        const detail = await api.getTask(openTask);
-        if (seq === refreshSeq && get().openTask === openTask) set({ detail });
-      }
+      const searching = get().query.trim();
+      if (searching !== "") void get().ensureSearchIndex();
+      if (openTask !== null) await rereadOpenTask(set, get, seq, openTask);
     } catch (e) {
       if (seq !== refreshSeq) return;
-      if (kindOf(e) === "notFound") set({ tskError: e as TskError });
+      const kind = kindOf(e);
+      if (kind === "notFound") set({ tskError: e as TskError });
       set({ ...failure("The board couldn't be loaded", messageOf(e)), loaded: true });
     }
   },
@@ -407,12 +497,22 @@ export const useDeck = create<DeckState>()((set, get) => ({
 
   async open(number) {
     const listed = get().visibleRows().some((r) => r.number === number);
-    set({ openTask: number, refusal: null, cursor: listed ? number : get().cursor, focus: "task", ...taskErrorCleared(get()) });
+    const shown = get().detail?.number;
+    set({
+      openTask: number,
+      refusal: null,
+      cursor: listed ? number : get().cursor,
+      focus: "task",
+      ...(shown === number ? {} : { detail: null }),
+      ...taskErrorCleared(get()),
+    });
     try {
       const detail = await api.getTask(number);
-      if (get().openTask === number) set({ detail });
+      const current = get().openTask;
+      if (current === number) set({ detail });
     } catch (e) {
-      set(failure(`T${number} couldn't be opened`, messageOf(e)));
+      const current = get().openTask;
+      if (current === number) set(failure(`T${number} couldn't be opened`, messageOf(e), number));
     }
   },
 
@@ -434,19 +534,21 @@ export const useDeck = create<DeckState>()((set, get) => ({
     try {
       await execute(cmd);
     } catch (e) {
-      const refused = typeof e === "object" && e !== null && kindOf(e) === "refused";
+      const refused = kindOf(e) === "refused";
       set({
         ...before,
-        ...failure(`${label} couldn't be completed`, messageOf(e), cmd.number),
+        ...failure(`${label} couldn't be completed`, writeFailureText(e), cmd.number),
         refusal: refused ? { code: (e as { code: string }).code, cmd, label } : null,
       });
       await get().refresh();
-      return;
+      return false;
     }
+    set({ searchIndex: withoutEntries(get().searchIndex, [cmd.number]) });
     const written = await stepsAfterAdd(change, cmd);
     if (finishesOpenTask(cmd, get().openTask)) get().close();
     await get().refresh();
     record(set, get, label, [recordStepId(change, cmd, stepsBefore, written)]);
+    return true;
   },
 
   async runBulk(cmds, changes, label) {
@@ -460,16 +562,20 @@ export const useDeck = create<DeckState>()((set, get) => ({
       (i) => execute(cmds[i]),
     );
     const done = result.ok.map((i) => changes[i]);
+    set({ searchIndex: withoutEntries(get().searchIndex, result.ok.map((i) => cmds[i].number)) });
     if (done.length > 0) record(set, get, label, done);
     if (result.ok.some((i) => finishesOpenTask(cmds[i], get().openTask))) get().close();
-    if (result.failed.length > 0) {
-      const lines = result.failed.map((f) => `T${cmds[f.number].number}: ${messageOf(f.error)}`);
+    const failed = result.failed.length > 0;
+    if (failed) {
+      const lines = result.failed.map((f) => `T${cmds[f.number].number}: ${writeFailureText(f.error)}`);
       set(failure(`${label} couldn't be completed for every task`, lines.join("\n")));
     }
     await get().refresh();
+    return !failed;
   },
 
   async undoLast() {
+    if (undoing) return;
     const stack = get().undo;
     const { irreversible } = get();
     if (irreversible !== null) {
@@ -478,22 +584,27 @@ export const useDeck = create<DeckState>()((set, get) => ({
     }
     const entry = stack[stack.length - 1];
     if (!entry) return;
-    set({ undo: stack.slice(0, -1) });
-    for (let i = entry.changes.length - 1; i >= 0; i--) {
-      const change = entry.changes[i];
-      const inverse = inverseOf(change);
-      if (!inverse) continue;
-      try {
-        await execute(inverse);
-      } catch (e) {
-        set({
-          undo: [...get().undo, { label: entry.label, changes: entry.changes.slice(0, i + 1) }],
-          ...failure(`${entry.label} couldn't be undone`, `T${change.number}: ${messageOf(e)}`),
-        });
-        break;
+    undoing = true;
+    try {
+      set({ undo: stack.slice(0, -1) });
+      for (let i = entry.changes.length - 1; i >= 0; i--) {
+        const change = entry.changes[i];
+        const inverse = inverseOf(change);
+        if (!inverse) continue;
+        try {
+          await execute(inverse);
+        } catch (e) {
+          set({
+            undo: [...get().undo, { label: entry.label, changes: entry.changes.slice(0, i + 1) }],
+            ...failure(`${entry.label} couldn't be undone`, `T${change.number}: ${writeFailureText(e)}`, change.number),
+          });
+          break;
+        }
       }
+      await get().refresh();
+    } finally {
+      undoing = false;
     }
-    await get().refresh();
   },
 
   async capture(input) {
@@ -509,8 +620,10 @@ export const useDeck = create<DeckState>()((set, get) => ({
   },
 
   setQuery(query) {
-    set({ query, cursor: null });
-    if (query.trim() !== "") void get().ensureSearchIndex();
+    const { rows, searchIndex, marks } = get();
+    set({ query, cursor: null, marks: marksIn(marks, filterRows(rows, query, searchIndex)) });
+    const searching = query.trim();
+    if (searching !== "") void get().ensureSearchIndex();
   },
 
   ensureSearchIndex() {
@@ -555,27 +668,25 @@ export const useDeck = create<DeckState>()((set, get) => ({
 
   applySettings(settings) {
     const pathChanged = settings.tskPath !== get().settings.tskPath;
-    set({ settings });
+    set({ settings, settingsLoaded: true });
     return pathChanged;
   },
 
-  async saveSettings(settings) {
-    try {
-      await api.saveSettings(settings);
-      set({ settings });
-    } catch (e) {
-      set(failure("Settings couldn't be saved", messageOf(e)));
-    }
+  saveSettings(settings) {
+    const base = get().settings;
+    return queueSave(set, get, (current) => changedOnto(base, settings, current));
   },
 
   async renameProject(path, name) {
-    const current = get().settings;
-    const projectNames = { ...current.projectNames };
     const trimmed = name.trim();
-    if (trimmed === "") delete projectNames[path];
-    else projectNames[path] = trimmed;
-    await get().saveSettings({ ...current, projectNames });
-    const { rows, options, allRows, settings } = get();
-    set({ rows: listedOrder(rows, options, allRows, settings.projectNames) });
+    await queueSave(set, get, (current) => {
+      const projectNames = { ...current.projectNames };
+      if (trimmed === "") delete projectNames[path];
+      else projectNames[path] = trimmed;
+      return { ...current, projectNames };
+    });
+    const { rows, listedRows, options, allRows, settings } = get();
+    const names = settings.projectNames;
+    set({ rows: listedOrder(rows, options, allRows, names), listedRows: listedOrder(listedRows, options, allRows, names) });
   },
 }));

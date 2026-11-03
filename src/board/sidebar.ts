@@ -55,7 +55,10 @@ export function scopeTitle(scope: Scope, model: SidebarModel, names: ProjectName
   }
 }
 
-/** The terminal desk rule: blocked, review and started tasks from every project, plus desk tasks that are ready or open. */
+/**
+ * The terminal desk rule: blocked, review and started tasks from every project, plus desk tasks
+ * that are ready or open. A task with an unknown status counts as open.
+ */
 export function onDesk(row: TaskRow): boolean {
   switch (row.status) {
     case "blocked":
@@ -64,6 +67,7 @@ export function onDesk(row: TaskRow): boolean {
       return true;
     case "ready":
     case "open":
+    case "unknown":
       return row.project === null;
     default:
       return false;

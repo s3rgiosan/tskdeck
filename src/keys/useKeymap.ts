@@ -31,7 +31,11 @@ function firesInTextField(normalized: string, isMac: boolean): boolean {
   return modifiers.includes("ctrl") || modifiers.includes("meta");
 }
 
-function findHandler(
+/**
+ * The handler a key press runs in `context`: an action limited to that context wins, then an action
+ * that applies everywhere.
+ */
+export function findHandler(
   keymap: Keymap,
   handlers: Handlers,
   context: KeyContext,

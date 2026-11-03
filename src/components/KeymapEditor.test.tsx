@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
@@ -13,6 +13,7 @@ vi.mock("../api/client", async (importOriginal) => {
 beforeEach(() => {
   vi.resetAllMocks();
   useDeck.setState(useDeck.getInitialState(), true);
+  useDeck.setState({ settingsLoaded: true });
   vi.mocked(api.saveSettings).mockResolvedValue();
 });
 afterEach(cleanup);
@@ -81,6 +82,41 @@ describe("KeymapEditor", () => {
     await userEvent.click(screen.getByRole("button", { name: "Reset Undo" }));
     await vi.waitFor(() => expect(saved()).toEqual([{ sort: ["x"] }]));
     await userEvent.click(screen.getByRole("button", { name: "Reset All" }));
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Reset All Shortcuts" })).getByRole("button", { name: "Reset All" }));
     await vi.waitFor(() => expect(saved()).toEqual([{ sort: ["x"] }, {}]));
+  });
+
+  it("asks before resetting all shortcuts and keeps them on Cancel", async () => {
+    useDeck.setState({ settings: { openMode: "beside", keymap: { sort: ["x"] }, tskPath: null, sidebarHidden: false, projectNames: {} } });
+    render(<KeymapEditor isMac />);
+    await userEvent.click(screen.getByRole("button", { name: "Reset All" }));
+    const sheet = screen.getByRole("dialog", { name: "Reset All Shortcuts" });
+    expect(api.saveSettings).not.toHaveBeenCalled();
+    expect(within(sheet).getAllByRole("button").map((b) => b.textContent)).toEqual(["Cancel", "Reset All"]);
+    expect(within(sheet).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await userEvent.click(within(sheet).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Reset All Shortcuts" })).not.toBeInTheDocument();
+    expect(api.saveSettings).not.toHaveBeenCalled();
+  });
+
+  it("closes the confirmation with Escape without resetting", async () => {
+    render(<KeymapEditor isMac />);
+    await userEvent.click(screen.getByRole("button", { name: "Reset All" }));
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Reset All Shortcuts" })).not.toBeInTheDocument();
+    expect(api.saveSettings).not.toHaveBeenCalled();
+  });
+
+  it("reads Press Keys… on the recording button and returns to Record afterwards", async () => {
+    render(<KeymapEditor isMac />);
+    const record = screen.getByRole("button", { name: "Record Mark Done" });
+    expect(record).toHaveTextContent("Record");
+    await userEvent.click(record);
+    const active = screen.getByRole("button", { name: /Mark Done/ });
+    expect(active).toHaveTextContent("Press Keys…");
+    expect(active).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Record Undo" })).toHaveTextContent("Record");
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "Record Mark Done" })).toHaveTextContent("Record");
   });
 });
