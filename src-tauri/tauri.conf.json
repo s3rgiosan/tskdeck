@@ -32,6 +32,15 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc1OENBRDI1OTVBRDlBNEMKUldSTW1xMlZKYTJNZFl1YzdIVmd3RGNWWGYycHA4a1luNVFZcSt1dW42QjU5eHMwcDdWU2pvZEYK",
+      "endpoints": [
+        "https://github.com/s3rgiosan/tskdeck/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

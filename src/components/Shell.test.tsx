@@ -7,6 +7,9 @@ import {
   onMenu,
   onSettingsChanged,
   onTskCheckRequested,
+  onUpdateAvailable,
+  onUpdateCheckResult,
+  onUpdateProgress,
   openDocs,
   reportMenuState,
   setWindowTitle,
@@ -17,6 +20,7 @@ import {
 } from "../api/client";
 import type { TaskRow } from "../api/types";
 import { useDeck } from "../state/store";
+import { useUpdates } from "../state/updates";
 import { blockOn, detail, row } from "../test/fixtures";
 import { Shell } from "./Shell";
 
@@ -38,12 +42,18 @@ vi.mock("../api/client", async (importOriginal) => {
       saveSettings: vi.fn(),
       relocateTsk: vi.fn(),
       openSettings: vi.fn(),
+      checkForUpdates: vi.fn(),
+      pendingUpdate: vi.fn(),
+      installUpdate: vi.fn(),
     },
     zoom: vi.fn(),
     openDocs: vi.fn(),
     onBoardChanged: vi.fn(),
     onSettingsChanged: vi.fn(),
     onTskCheckRequested: vi.fn(),
+    onUpdateAvailable: vi.fn(),
+    onUpdateCheckResult: vi.fn(),
+    onUpdateProgress: vi.fn(),
     onMenu: vi.fn(),
     setWindowTitle: vi.fn(),
     reportMenuState: vi.fn(),
@@ -64,7 +74,7 @@ function subscriber<T extends (...args: never[]) => void>(subscribe: (cb: T) => 
 
 async function mountWith(rows: TaskRow[]) {
   vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0" });
-  vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {} });
+  vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true });
   vi.mocked(api.listScope).mockResolvedValue(rows);
   vi.mocked(api.setStatus).mockResolvedValue();
   vi.mocked(api.setArchived).mockResolvedValue();
@@ -90,6 +100,11 @@ beforeEach(() => {
   vi.mocked(onMenu).mockResolvedValue(() => {});
   vi.mocked(setWindowTitle).mockResolvedValue();
   vi.mocked(showAlert).mockResolvedValue();
+  vi.mocked(api.pendingUpdate).mockResolvedValue(null);
+  vi.mocked(onUpdateAvailable).mockResolvedValue(() => {});
+  vi.mocked(onUpdateCheckResult).mockResolvedValue(() => {});
+  vi.mocked(onUpdateProgress).mockResolvedValue(() => {});
+  useUpdates.setState(useUpdates.getInitialState(), true);
   localStorage.clear();
 });
 afterEach(cleanup);
@@ -150,7 +165,7 @@ describe("palette and settings keys", () => {
 describe("loading", () => {
   it("shows a spinner on the board until the first listing arrives", async () => {
     vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0" });
-    vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {} });
+    vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true });
     vi.mocked(api.listScope).mockReturnValue(new Promise(() => {}));
     vi.mocked(onBoardChanged).mockResolvedValue(() => {});
     render(<Shell />);
@@ -252,7 +267,7 @@ describe("menu bar", () => {
 describe("settings saved in the settings window", () => {
   it("applies the keymap, open mode and sidebar choice", async () => {
     await mountWith([row({ number: 3, status: "started" })]);
-    subscriber(onSettingsChanged)({ openMode: "overlay", keymap: { "status.done": ["x"] }, tskPath: null, sidebarHidden: true, projectNames: {} });
+    subscriber(onSettingsChanged)({ openMode: "overlay", keymap: { "status.done": ["x"] }, tskPath: null, sidebarHidden: true, projectNames: {}, checkForUpdates: true });
     await vi.waitFor(() => expect(screen.queryByRole("navigation", { name: "Views" })).not.toBeInTheDocument());
     expect(useDeck.getState().settings.openMode).toBe("overlay");
     await userEvent.keyboard("x");
@@ -262,7 +277,7 @@ describe("settings saved in the settings window", () => {
 
   it("looks for tsk again when the tsk path changed", async () => {
     await mountWith([row({ number: 3 })]);
-    subscriber(onSettingsChanged)({ openMode: "beside", keymap: {}, tskPath: "/opt/test/tsk", sidebarHidden: false, projectNames: {} });
+    subscriber(onSettingsChanged)({ openMode: "beside", keymap: {}, tskPath: "/opt/test/tsk", sidebarHidden: false, projectNames: {}, checkForUpdates: true });
     await vi.waitFor(() => expect(api.relocateTsk).toHaveBeenCalledTimes(1));
   });
 
@@ -276,7 +291,7 @@ describe("settings saved in the settings window", () => {
 describe("tsk missing screen", () => {
   async function mountMissing() {
     vi.mocked(api.tskInfo).mockRejectedValue({ kind: "notFound" });
-    vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {} });
+    vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true });
     vi.mocked(onBoardChanged).mockResolvedValue(() => {});
     render(<Shell />);
     await screen.findByText("tsk Not Found");
@@ -486,7 +501,7 @@ describe("window chrome", () => {
     await mountWith([row({ number: 3 })]);
     vi.mocked(api.saveSettings).mockResolvedValue();
     await userEvent.click(screen.getByRole("button", { name: "Hide Sidebar" }));
-    await vi.waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ sidebarHidden: true, projectNames: {} })));
+    await vi.waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ sidebarHidden: true, projectNames: {}, checkForUpdates: true })));
   });
 });
 
@@ -555,14 +570,14 @@ describe("sidebar", () => {
     expect(screen.getByRole("navigation", { name: "Views" })).toBeInTheDocument();
     await userEvent.keyboard("{Control>}{Alt>}s{/Alt}{/Control}");
     await vi.waitFor(() => expect(screen.queryByRole("navigation", { name: "Views" })).not.toBeInTheDocument());
-    expect(api.saveSettings).toHaveBeenLastCalledWith(expect.objectContaining({ sidebarHidden: true, projectNames: {} }));
+    expect(api.saveSettings).toHaveBeenLastCalledWith(expect.objectContaining({ sidebarHidden: true, projectNames: {}, checkForUpdates: true }));
     await userEvent.keyboard("{Control>}{Alt>}s{/Alt}{/Control}");
     await vi.waitFor(() => expect(screen.getByRole("navigation", { name: "Views" })).toBeInTheDocument());
-    expect(api.saveSettings).toHaveBeenLastCalledWith(expect.objectContaining({ sidebarHidden: false, projectNames: {} }));
+    expect(api.saveSettings).toHaveBeenLastCalledWith(expect.objectContaining({ sidebarHidden: false, projectNames: {}, checkForUpdates: true }));
   });
 
   it("starts hidden when the saved settings say so", async () => {
-    vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: true, projectNames: {} });
+    vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: true, projectNames: {}, checkForUpdates: true });
     vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0" });
     vi.mocked(api.listScope).mockResolvedValue([row({ number: 3 })]);
     vi.mocked(onBoardChanged).mockResolvedValue(() => {});
@@ -611,12 +626,12 @@ describe("sidebar", () => {
     setWidth(900);
     await mountWith([row({ number: 3, status: "started" })]);
     vi.mocked(api.saveSettings).mockResolvedValue();
-    await useDeck.getState().saveSettings({ ...useDeck.getState().settings, sidebarHidden: true, projectNames: {} });
+    await useDeck.getState().saveSettings({ ...useDeck.getState().settings, sidebarHidden: true, projectNames: {}, checkForUpdates: true });
     await userEvent.keyboard("{Enter}");
     await screen.findByRole("complementary", { name: "Task" });
     subscriber(onMenu)("sidebar");
     await vi.waitFor(() => expect(screen.getByRole("navigation", { name: "Views" })).toBeInTheDocument());
-    expect(api.saveSettings).toHaveBeenLastCalledWith(expect.objectContaining({ sidebarHidden: false, projectNames: {} }));
+    expect(api.saveSettings).toHaveBeenLastCalledWith(expect.objectContaining({ sidebarHidden: false, projectNames: {}, checkForUpdates: true }));
   });
 });
 
@@ -700,7 +715,7 @@ describe("tasks over the board", () => {
 describe("board empty state", () => {
   it("offers New Task when the board has no tasks", async () => {
     vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0" });
-    vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {} });
+    vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true });
     vi.mocked(api.listScope).mockResolvedValue([]);
     vi.mocked(onBoardChanged).mockResolvedValue(() => {});
     render(<Shell />);
@@ -1067,6 +1082,7 @@ describe("project names", () => {
       tskPath: null,
       sidebarHidden: false,
       projectNames: { [path]: "Alpha" },
+      checkForUpdates: true,
     });
     vi.mocked(api.listScope).mockResolvedValue([row({ number: 3, status: "started", project: path })]);
     vi.mocked(onBoardChanged).mockResolvedValue(() => {});
@@ -1083,5 +1099,62 @@ describe("project names", () => {
     useDeck.setState({ settings: { ...useDeck.getState().settings, projectNames: { [path]: "Alpha" } } });
     await useDeck.getState().selectScope({ kind: "project", path });
     await vi.waitFor(() => expect(setWindowTitle).toHaveBeenCalledWith("Alpha"));
+  });
+});
+
+describe("update card", () => {
+  const release = { version: "9.9.9", notes: null };
+
+  it("shows a release that a check found before the window loaded", async () => {
+    vi.mocked(api.pendingUpdate).mockResolvedValue(release);
+    await mountWith([row({ number: 3, status: "started" })]);
+    expect(await screen.findByText("tskdeck 9.9.9 is available.")).toBeInTheDocument();
+  });
+
+  it("shows a release that a scheduled check finds later", async () => {
+    await mountWith([row({ number: 3, status: "started" })]);
+    expect(screen.queryByText("tskdeck 9.9.9 is available.")).not.toBeInTheDocument();
+    act(() => subscriber(onUpdateAvailable)(release));
+    expect(await screen.findByText("tskdeck 9.9.9 is available.")).toBeInTheDocument();
+  });
+
+  it("hides the card with Later and shows it again when a check from the menu finds the release", async () => {
+    vi.mocked(api.pendingUpdate).mockResolvedValue(release);
+    await mountWith([row({ number: 3, status: "started" })]);
+    await userEvent.click(await screen.findByRole("button", { name: "Later" }));
+    expect(screen.queryByText("tskdeck 9.9.9 is available.")).not.toBeInTheDocument();
+    act(() => subscriber(onUpdateCheckResult)({ update: release, error: null }));
+    expect(await screen.findByText("tskdeck 9.9.9 is available.")).toBeInTheDocument();
+  });
+
+  it("installs the release and reports a failed install", async () => {
+    vi.mocked(api.pendingUpdate).mockResolvedValue(release);
+    vi.mocked(api.installUpdate).mockRejectedValue("signature mismatch");
+    await mountWith([row({ number: 3, status: "started" })]);
+    await userEvent.click(await screen.findByRole("button", { name: "Install and Relaunch" }));
+    expect(api.installUpdate).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(showAlert).toHaveBeenCalledWith("The update couldn't be installed", "signature mismatch"));
+    expect(screen.getByRole("button", { name: "Install and Relaunch" })).toBeEnabled();
+  });
+
+  it("says that tskdeck is up to date after a check from the menu finds nothing", async () => {
+    await mountWith([row({ number: 3, status: "started" })]);
+    act(() => subscriber(onUpdateCheckResult)({ update: null, error: null }));
+    expect(showAlert).toHaveBeenCalledWith("tskdeck is up to date", "No newer version is available.");
+  });
+
+  it("reports a check from the menu that failed", async () => {
+    await mountWith([row({ number: 3, status: "started" })]);
+    act(() => subscriber(onUpdateCheckResult)({ update: null, error: "offline" }));
+    await vi.waitFor(() => expect(showAlert).toHaveBeenCalledWith("Couldn't check for updates", "offline"));
+  });
+
+  it("checks for updates from the command palette", async () => {
+    vi.mocked(api.checkForUpdates).mockResolvedValue(release);
+    await mountWith([row({ number: 3, status: "started" })]);
+    await userEvent.keyboard(":");
+    await userEvent.type(screen.getByRole("combobox", { name: "Search actions" }), "check for updates{Enter}");
+    expect(api.checkForUpdates).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("tskdeck 9.9.9 is available.")).toBeInTheDocument();
   });
 });

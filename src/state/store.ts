@@ -359,7 +359,7 @@ async function fillIndex(set: Set_, get: Get_): Promise<void> {
 export const useDeck = create<DeckState>()((set, get) => ({
   tsk: null,
   tskError: null,
-  settings: { openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {} },
+  settings: { openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true },
   settingsLoaded: false,
   scope: { kind: "desk" },
   lastProject: null,

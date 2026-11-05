@@ -1,7 +1,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, onMenu, onSettingsChanged, requestTskCheck, setWindowHeight, setWindowTitle, showAlert } from "../api/client";
+import { api, onMenu, onSettingsChanged, onUpdateProgress, requestTskCheck, setWindowHeight, setWindowTitle, showAlert } from "../api/client";
 import type { Settings as SettingsValue } from "../api/types";
 import { useDeck } from "../state/store";
 import { GeneralSettings } from "./Settings";
@@ -11,10 +11,19 @@ vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
   return {
     ...actual,
-    api: { saveSettings: vi.fn(), getSettings: vi.fn(), tskInfo: vi.fn(), listScope: vi.fn(), relocateTsk: vi.fn() },
+    api: {
+      saveSettings: vi.fn(),
+      getSettings: vi.fn(),
+      tskInfo: vi.fn(),
+      listScope: vi.fn(),
+      relocateTsk: vi.fn(),
+      checkForUpdates: vi.fn(),
+      installUpdate: vi.fn(),
+    },
     onBoardChanged: vi.fn(),
     onSettingsChanged: vi.fn(),
     onMenu: vi.fn(),
+    onUpdateProgress: vi.fn(),
     requestTskCheck: vi.fn(),
     setWindowTitle: vi.fn(),
     setWindowHeight: vi.fn(),
@@ -22,7 +31,7 @@ vi.mock("../api/client", async (importOriginal) => {
   };
 });
 
-const DEFAULTS: SettingsValue = { openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {} };
+const DEFAULTS: SettingsValue = { openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true };
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -35,6 +44,7 @@ beforeEach(() => {
   vi.mocked(requestTskCheck).mockResolvedValue();
   vi.mocked(setWindowTitle).mockResolvedValue();
   vi.mocked(setWindowHeight).mockResolvedValue();
+  vi.mocked(onUpdateProgress).mockResolvedValue(() => {});
   localStorage.clear();
 });
 afterEach(cleanup);
@@ -72,6 +82,38 @@ describe("GeneralSettings", () => {
     await vi.waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith({ ...DEFAULTS, tskPath: "/opt/tsk" }));
     expect(api.relocateTsk).not.toHaveBeenCalled();
   });
+
+  it("saves the automatic update checks setting", async () => {
+    render(<GeneralSettings />);
+    await userEvent.click(screen.getByLabelText("Check for updates automatically"));
+    await vi.waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith({ ...DEFAULTS, checkForUpdates: false }));
+  });
+
+  it("says that tskdeck is up to date when Check Now finds nothing", async () => {
+    vi.mocked(api.checkForUpdates).mockResolvedValue(null);
+    render(<GeneralSettings />);
+    await userEvent.click(screen.getByRole("button", { name: "Check Now" }));
+    expect(await screen.findByText("Up to date")).toBeInTheDocument();
+  });
+
+  it("offers to install the release that Check Now finds", async () => {
+    vi.mocked(api.checkForUpdates).mockResolvedValue({ version: "9.9.9", notes: null });
+    vi.mocked(api.installUpdate).mockReturnValue(new Promise(() => {}));
+    render(<GeneralSettings />);
+    await userEvent.click(screen.getByRole("button", { name: "Check Now" }));
+    expect(await screen.findByText("Version 9.9.9 available")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Install and Relaunch" }));
+    expect(api.installUpdate).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Downloading…" })).toBeDisabled();
+  });
+
+  it("shows why Check Now failed", async () => {
+    vi.mocked(api.checkForUpdates).mockRejectedValue("offline");
+    render(<GeneralSettings />);
+    await userEvent.click(screen.getByRole("button", { name: "Check Now" }));
+    expect(await screen.findByText("Couldn't check for updates: offline")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check Now" })).toBeEnabled();
+  });
 });
 
 describe("SettingsWindow", () => {
@@ -85,7 +127,7 @@ describe("SettingsWindow", () => {
   it("takes settings saved from the main window", async () => {
     render(<SettingsWindow />);
     await vi.waitFor(() => expect(onSettingsChanged).toHaveBeenCalled());
-    vi.mocked(onSettingsChanged).mock.calls[0][0]({ ...DEFAULTS, sidebarHidden: true, projectNames: {} });
+    vi.mocked(onSettingsChanged).mock.calls[0][0]({ ...DEFAULTS, sidebarHidden: true, projectNames: {}, checkForUpdates: true });
     expect(useDeck.getState().settings.sidebarHidden).toBe(true);
   });
 

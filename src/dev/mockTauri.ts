@@ -2,7 +2,8 @@
 // URL controls: `?open=<n>` opens that task's pane once the board has loaded; `#settings` shows Settings;
 // `?fullscreen` and `?reduceTransparency` report those window states as on; `?overlay` opens tasks over the board;
 // `?rename` chooses Rename… from the first project's context menu; `?marks` starts multi-select with T3, T4 and T5
-// marked; `?unknown` gives T10 a status the app does not recognise; `?longnotes` gives T3 notes taller than six lines.
+// marked; `?unknown` gives T10 a status the app does not recognise; `?longnotes` gives T3 notes taller than six lines;
+// `?update` reports a newer release, which the sidebar card and Check Now show.
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type { Block, ListOptions, Review, Settings, Status, TaskDetail, TaskRow, Timestamp } from "../api/types";
@@ -103,6 +104,7 @@ const SETTINGS: Settings = {
   tskPath: "/usr/local/bin/tsk",
   sidebarHidden: false,
   projectNames: {},
+  checkForUpdates: true,
 };
 
 function listScope(scope: { kind: string; path?: string; name?: string }, options: ListOptions): TaskRow[] {
@@ -148,6 +150,11 @@ function handle(cmd: string, payload: Record<string, unknown> = {}): unknown {
     case "menu_state":
     case "show_task_menu":
     case "show_pull_down":
+      return null;
+    case "check_for_updates":
+    case "pending_update":
+      return params.has("update") ? { version: "9.9.9", notes: null } : null;
+    case "install_update":
       return null;
     case "reduce_transparency":
       return params.has("reduceTransparency");

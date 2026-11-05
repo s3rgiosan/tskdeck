@@ -17,7 +17,7 @@ pub enum OpenMode {
     Beside,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub open_mode: OpenMode,
@@ -26,6 +26,21 @@ pub struct Settings {
     pub sidebar_hidden: bool,
     /// Names given to projects in tskdeck, keyed by the project's full path.
     pub project_names: BTreeMap<String, String>,
+    /// Whether tskdeck looks for a newer release after launch and once a day.
+    pub check_for_updates: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Settings {
+        Settings {
+            open_mode: OpenMode::default(),
+            keymap: BTreeMap::new(),
+            tsk_path: None,
+            sidebar_hidden: false,
+            project_names: BTreeMap::new(),
+            check_for_updates: true,
+        }
+    }
 }
 
 /// A missing file gives the defaults. An unreadable or invalid file is moved to
@@ -94,6 +109,7 @@ mod tests {
             tsk_path: Some(PathBuf::from("/example/bin/tsk")),
             sidebar_hidden: true,
             project_names,
+            check_for_updates: false,
         };
         save(&path, &settings).unwrap();
         assert_eq!(load(&path), settings);
@@ -164,6 +180,7 @@ mod tests {
         assert!(loaded.keymap.is_empty());
         assert!(!loaded.sidebar_hidden);
         assert!(loaded.project_names.is_empty());
+        assert!(loaded.check_for_updates);
     }
 
     #[test]

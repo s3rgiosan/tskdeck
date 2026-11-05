@@ -2,12 +2,14 @@
 //! handler they all share.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::Deserialize;
 use tauri::menu::{Menu, MenuBuilder, MenuEvent, MenuItemBuilder};
 use tauri::{AppHandle, Emitter, LogicalPosition, Manager, State, Window, WindowEvent, Wry};
 use tauri_plugin_opener::OpenerExt;
+
+use crate::updates::{UPDATE_CHECK_RESULT_EVENT, UpdateCheckResult, UpdateManager};
 
 /// The label of the main window.
 pub const MAIN: &str = "main";
@@ -17,6 +19,8 @@ pub const MAIN: &str = "main";
 pub enum Route {
     Settings,
     Docs,
+    /// A check for updates runs now, and its result goes to the main window.
+    CheckUpdates,
     /// The focused window's page zoom changes.
     Zoom(ZoomStep),
     /// A `menu` event with the item id goes to this window.
@@ -212,6 +216,7 @@ pub fn route(id: &str, focused: Option<&str>) -> Option<Route> {
     match id {
         "settings" => Some(Route::Settings),
         "docs" => Some(Route::Docs),
+        CHECK_UPDATES => Some(Route::CheckUpdates),
         "zoom-reset" => Some(Route::Zoom(ZoomStep::Actual)),
         "zoom-in" => Some(Route::Zoom(ZoomStep::In)),
         "zoom-out" => Some(Route::Zoom(ZoomStep::Out)),
@@ -396,6 +401,24 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
     }
 }
 
+/// The app menu item that checks for updates.
+pub const CHECK_UPDATES: &str = "check-updates";
+
+/// Brings the main window to the front and sends it the result of a check for updates run now.
+fn check_for_updates(app: &AppHandle) {
+    let _ = crate::windows::show_main(app);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let updates = app.state::<Arc<UpdateManager>>().inner().clone();
+        let result = updates.check_now().await;
+        let _ = app.emit_to(
+            MAIN,
+            UPDATE_CHECK_RESULT_EVENT,
+            UpdateCheckResult::from(&result),
+        );
+    });
+}
+
 /// Opens settings or the docs, or sends the item id to the window that handles it.
 pub fn handle(app: &AppHandle, event: MenuEvent) {
     let focused = app
@@ -414,6 +437,7 @@ pub fn handle(app: &AppHandle, event: MenuEvent) {
         Some(Route::Docs) => {
             let _ = app.opener().open_url(DOCS_URL, None::<&str>);
         }
+        Some(Route::CheckUpdates) => check_for_updates(app),
         Some(Route::Zoom(step)) => zoom_focused(app, step),
         Some(Route::Window(label)) => {
             // A check item toggles its own mark when chosen; the page's choice sets it again.
@@ -441,8 +465,8 @@ mod macos {
     use tauri::{AppHandle, Manager, Wry};
 
     use super::{
-        GROUP_ITEMS, MenuState, SORT_ITEMS, TASK_ITEMS, default_accelerator, drawer_title,
-        group_id, redo_enabled, sidebar_title, sort_id, undo_item,
+        CHECK_UPDATES, GROUP_ITEMS, MenuState, SORT_ITEMS, TASK_ITEMS, default_accelerator,
+        drawer_title, group_id, redo_enabled, sidebar_title, sort_id, undo_item,
     };
 
     /// The menu bar items whose title, check mark, key equivalent or enabled state follows the
@@ -523,6 +547,7 @@ mod macos {
         let mut keyed_items = HashMap::new();
         let app_menu = SubmenuBuilder::new(app, package.name.clone())
             .about(Some(about))
+            .item(&MenuItemBuilder::with_id(CHECK_UPDATES, "Check for Updates…").build(app)?)
             .separator()
             .item(&keyed(app, &mut keyed_items, "settings", "Settings…", true)?)
             .separator()
@@ -713,6 +738,10 @@ mod tests {
     fn settings_and_docs_are_handled_here() {
         assert_eq!(route("settings", Some(MAIN)), Some(Route::Settings));
         assert_eq!(route("docs", None), Some(Route::Docs));
+        assert_eq!(
+            route(CHECK_UPDATES, Some("settings")),
+            Some(Route::CheckUpdates)
+        );
         assert_eq!(route("copy", Some(MAIN)), None);
     }
 

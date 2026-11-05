@@ -28,7 +28,7 @@ describe("KeymapEditor", () => {
     await userEvent.click(screen.getByRole("button", { name: "Record Mark Done" }));
     await userEvent.keyboard("{Control>}{Enter}{/Control}");
     await vi.waitFor(() => expect(saved()).toEqual([{ "status.done": ["ctrl+enter"] }]));
-    expect(api.saveSettings).toHaveBeenCalledWith({ openMode: "beside", keymap: { "status.done": ["ctrl+enter"] }, tskPath: null, sidebarHidden: false, projectNames: {} });
+    expect(api.saveSettings).toHaveBeenCalledWith({ openMode: "beside", keymap: { "status.done": ["ctrl+enter"] }, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true });
   });
 
   it("ignores a lone modifier and cancels on Escape", async () => {
@@ -77,7 +77,7 @@ describe("KeymapEditor", () => {
   });
 
   it("resets one action and all actions", async () => {
-    useDeck.setState({ settings: { openMode: "beside", keymap: { undo: ["ctrl+z"], sort: ["x"] }, tskPath: null, sidebarHidden: false, projectNames: {} } });
+    useDeck.setState({ settings: { openMode: "beside", keymap: { undo: ["ctrl+z"], sort: ["x"] }, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true } });
     render(<KeymapEditor isMac />);
     await userEvent.click(screen.getByRole("button", { name: "Reset Undo" }));
     await vi.waitFor(() => expect(saved()).toEqual([{ sort: ["x"] }]));
@@ -87,7 +87,7 @@ describe("KeymapEditor", () => {
   });
 
   it("asks before resetting all shortcuts and keeps them on Cancel", async () => {
-    useDeck.setState({ settings: { openMode: "beside", keymap: { sort: ["x"] }, tskPath: null, sidebarHidden: false, projectNames: {} } });
+    useDeck.setState({ settings: { openMode: "beside", keymap: { sort: ["x"] }, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true } });
     render(<KeymapEditor isMac />);
     await userEvent.click(screen.getByRole("button", { name: "Reset All" }));
     const sheet = screen.getByRole("dialog", { name: "Reset All Shortcuts" });

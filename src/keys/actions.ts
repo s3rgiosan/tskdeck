@@ -52,6 +52,7 @@ export const ACTIONS = [
   { id: "zoom.out", label: "Zoom Out" },
   { id: "zoom.reset", label: "Actual Size" },
   { id: "help.docs", label: "tsk Documentation" },
+  { id: "updates.check", label: "Check for Updates…" },
 ] as const;
 
 export type ActionId = (typeof ACTIONS)[number]["id"];

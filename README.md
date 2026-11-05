@@ -46,6 +46,10 @@ Download the installer for your platform from the [Releases](https://github.com/
 
 Releases are unsigned.
 
+### Updates
+
+tskdeck looks for a newer release one minute after launch, and then once a day. When it finds one, a card at the foot of the sidebar shows **Install and Relaunch** and **Later**. To check at once, choose **Check for Updates…** in the app menu on macOS, or in the command palette. To stop the automatic checks, clear **Check for updates automatically** in Settings → General.
+
 ### Opening the unsigned app on macOS
 
 Move `tskdeck.app` to `/Applications`, then either right-click it and choose Open, or remove the quarantine flag:
@@ -56,7 +60,7 @@ xattr -dr com.apple.quarantine /Applications/tskdeck.app
 
 ## Settings
 
-tskdeck keeps its settings (open-task mode, keymap, path to `tsk`) in `settings.json` inside the app config directory for the identifier `com.s3rgiosan.tskdeck`:
+tskdeck keeps its settings (open-task mode, keymap, path to `tsk`, update checks) in `settings.json` inside the app config directory for the identifier `com.s3rgiosan.tskdeck`:
 
 - macOS: `~/Library/Application Support/com.s3rgiosan.tskdeck/settings.json`
 - Linux: `$XDG_CONFIG_HOME/com.s3rgiosan.tskdeck/settings.json`, or `~/.config/com.s3rgiosan.tskdeck/settings.json` when `XDG_CONFIG_HOME` is unset

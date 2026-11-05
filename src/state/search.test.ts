@@ -80,7 +80,7 @@ describe("search", () => {
       return () => {};
     });
     vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0" });
-    vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {} });
+    vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true });
     vi.mocked(api.listScope).mockResolvedValue([row({ number: 1 })]);
     await useDeck.getState().init();
     useDeck.setState({ searchIndex: new Map([[1, { number: 1, title: "x", thread: null, assignee: null }]]) });

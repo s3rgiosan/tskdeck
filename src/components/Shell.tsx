@@ -22,6 +22,7 @@ import { useKeymap } from "../keys/useKeymap";
 import { menuAccelerators, runMenuItem } from "../menu";
 import type { DeckState } from "../state/store";
 import { failure, useDeck } from "../state/store";
+import { checkForUpdatesNow, subscribeToUpdates } from "../updates/checks";
 import { AssignDialog } from "./AssignDialog";
 import { RenameProjectDialog } from "./RenameProjectDialog";
 import { Board } from "./Board";
@@ -236,6 +237,7 @@ export function Shell() {
   }, [init]);
   useSubscription(subscribeToSettings);
   useSubscription(subscribeToTskChecks);
+  useSubscription(subscribeToUpdates);
 
   useEffect(() => {
     if (sidebarHidden && useDeck.getState().focus === "sidebar") useDeck.setState({ focus: "board" });
@@ -340,6 +342,7 @@ export function Shell() {
     "zoom.out": () => zoomWindow("out"),
     "zoom.reset": () => zoomWindow("reset"),
     "help.docs": showDocs,
+    "updates.check": checkForUpdatesNow,
     search: () => setSearchFocus((n) => n + 1),
     undo: () => void state().undoLast(),
     // The drawer takes the task pane's place, so opening it closes the open task.

@@ -58,6 +58,7 @@ export const DEFAULT_KEYMAP: Keymap = {
   "zoom.out": [],
   "zoom.reset": [],
   "help.docs": [],
+  "updates.check": [],
 };
 
 /**

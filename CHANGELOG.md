@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Update checks: tskdeck looks for a newer release one minute after launch and then once a day, and a card at the foot of the sidebar installs it and relaunches the app, or hides it with Later until the app quits.
+- Check for Updates… in the app menu on macOS and in the command palette, and an Updates setting with Check Now in Settings → General.
+- Signed update files and a `latest.json` manifest on each GitHub release.
+
 ## [1.0.1] - 2026-11-05
 
 ### Changed

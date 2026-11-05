@@ -186,6 +186,27 @@ export interface Settings {
   sidebarHidden: boolean;
   /** Names given to projects in tskdeck, keyed by the project's full path. */
   projectNames: Record<string, string>;
+  /** Whether tskdeck looks for a newer release after launch and once a day. */
+  checkForUpdates: boolean;
+}
+
+/** A newer release than the running app. */
+export interface UpdateInfo {
+  version: string;
+  /** The release notes, when the release has any. */
+  notes: string | null;
+}
+
+/** Download progress in bytes. `total` is null when the server sends no length. */
+export interface UpdateProgress {
+  downloaded: number;
+  total: number | null;
+}
+
+/** The outcome of a check started from the app menu: the update found, or why the check failed. */
+export interface UpdateCheckResult {
+  update: UpdateInfo | null;
+  error: string | null;
 }
 
 export interface TskInfo {

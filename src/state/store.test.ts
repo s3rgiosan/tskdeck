@@ -27,7 +27,7 @@ vi.mock("../api/client", async (importOriginal) => {
   };
 });
 
-const settings = { openMode: "beside" as const, keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {} };
+const settings = { openMode: "beside" as const, keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true };
 
 beforeEach(() => {
   resetBoardSubscription();
@@ -305,7 +305,7 @@ describe("marking the open task done", () => {
 
 describe("applySettings", () => {
   it("takes settings saved elsewhere and reports whether the tsk path changed", () => {
-    const next = { openMode: "overlay" as const, keymap: { undo: ["x"] }, tskPath: null, sidebarHidden: true, projectNames: {} };
+    const next = { openMode: "overlay" as const, keymap: { undo: ["x"] }, tskPath: null, sidebarHidden: true, projectNames: {}, checkForUpdates: true };
     expect(useDeck.getState().applySettings(next)).toBe(false);
     expect(useDeck.getState().settings).toEqual(next);
     expect(useDeck.getState().applySettings({ ...next, tskPath: "/opt/test/tsk" })).toBe(true);

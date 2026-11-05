@@ -1,4 +1,4 @@
-//! Windows other than the main one.
+//! Windows other than the main one, and bringing the main window to the front.
 
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
@@ -35,6 +35,14 @@ pub fn open_settings(app: &AppHandle) -> tauri::Result<()> {
     match app.get_webview_window(SETTINGS_LABEL) {
         Some(window) => focus(&window),
         None => Err(error),
+    }
+}
+
+/// Shows the main window and brings it to the front.
+pub fn show_main(app: &AppHandle) -> tauri::Result<()> {
+    match app.get_webview_window(crate::menu::MAIN) {
+        Some(window) => focus(&window),
+        None => Ok(()),
     }
 }
 
