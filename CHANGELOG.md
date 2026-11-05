@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-05
+
 ### Changed
 
 - Selecting another view, project, thread or assignee closes the task view.
@@ -36,5 +38,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A content security policy for the app's windows, and an absolute path required for the `tsk` binary in Settings.
 
-[Unreleased]: https://github.com/s3rgiosan/tskdeck/compare/1.0.0...HEAD
+[Unreleased]: https://github.com/s3rgiosan/tskdeck/compare/1.0.1...HEAD
+[1.0.1]: https://github.com/s3rgiosan/tskdeck/compare/1.0.0...1.0.1
 [1.0.0]: https://github.com/s3rgiosan/tskdeck/releases/tag/1.0.0
