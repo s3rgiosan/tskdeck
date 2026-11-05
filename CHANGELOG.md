@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Selecting another view, project, thread or assignee in the sidebar closes the task view.
+- Selecting another view, project, thread or assignee closes the task view.
 
 ## [1.0.0] - 2026-11-03
 
