@@ -870,8 +870,8 @@ describe("cursor across live changes", () => {
     await userEvent.keyboard("{Enter}");
     await screen.findByRole("complementary", { name: "Task" });
     vi.mocked(api.listScope).mockResolvedValue([row({ number: 7, status: "started" })]);
-    await useDeck.getState().selectScope({ kind: "all" });
-    useDeck.setState({ cursor: 7 });
+    await useDeck.getState().refresh();
+    useDeck.setState({ cursor: 7, focus: "board" });
     expect(useDeck.getState().openTask).toBe(3);
     await userEvent.keyboard("{Control>}d{/Control}");
     await vi.waitFor(() => expect(api.setStatus).toHaveBeenCalledWith(7, { kind: "done", clean: false }));

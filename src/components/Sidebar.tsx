@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { showPullDown } from "../api/client";
 import type { Scope } from "../api/types";
 import type { SidebarItem } from "../board/sidebar";
-import { sidebarModel } from "../board/sidebar";
+import { sameScope, sidebarModel } from "../board/sidebar";
 import { resolveKeymap } from "../keys/keymap";
 import type { Handler, Handlers } from "../keys/useKeymap";
 import { useKeymap } from "../keys/useKeymap";
@@ -23,10 +23,6 @@ interface Filter {
 export const RENAME_PROJECT = "pane-rename-project";
 
 const TITLES: Record<SectionName, string> = { projects: "Projects", threads: "Threads", assignees: "Assignees" };
-
-function sameScope(a: Scope, b: Scope): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
 
 function symbolFor(scope: Scope): SymbolName {
   switch (scope.kind) {

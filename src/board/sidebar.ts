@@ -40,6 +40,11 @@ export function sidebarModel(allRows: TaskRow[], names: ProjectNames = {}): Side
 }
 
 /** The name the sidebar gives a scope; a project with no rows left is named by its given name or its folder. */
+/** True when both scopes name the same view, project, thread or assignee. */
+export function sameScope(a: Scope, b: Scope): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export function scopeTitle(scope: Scope, model: SidebarModel, names: ProjectNames = {}): string {
   switch (scope.kind) {
     case "desk":
