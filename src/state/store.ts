@@ -18,7 +18,7 @@ import { groupChoices, sortChoices } from "../board/choices";
 import { applyOptimistic } from "../board/optimistic";
 import { buildBoard, liveNumbersOf } from "../board/sections";
 import type { ProjectNames } from "../board/sidebar";
-import { onDesk, projectLabelsOf, sortByProject } from "../board/sidebar";
+import { onDesk, projectLabelsOf, sameScope, sortByProject } from "../board/sidebar";
 import type { Change, Command, UndoEntry } from "../board/undo";
 import { inverseOf } from "../board/undo";
 
@@ -459,6 +459,8 @@ export const useDeck = create<DeckState>()((set, get) => ({
   },
 
   async selectScope(scope) {
+    // The open task's pane belongs to the board it was opened from.
+    if (!sameScope(scope, get().scope)) get().close();
     const current = get().options;
     const group = groupChoices(scope).includes(current.group) ? current.group : "none";
     const sort = sortChoices(scope).includes(current.sort) ? current.sort : "recent";

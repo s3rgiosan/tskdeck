@@ -537,6 +537,24 @@ describe("reading the open task", () => {
   });
 });
 
+describe("changing scope", () => {
+  it("closes the open task when another scope is selected", async () => {
+    useDeck.setState({ scope: { kind: "project", path: "/home/test/alpha" }, openTask: 1, detail: detail({ number: 1 }) });
+    await useDeck.getState().selectScope({ kind: "project", path: "/home/test/beta" });
+    const state = useDeck.getState();
+    expect(state.openTask).toBeNull();
+    expect(state.detail).toBeNull();
+    expect(api.getTask).not.toHaveBeenCalled();
+  });
+
+  it("keeps the open task when the current scope is selected again", async () => {
+    vi.mocked(api.getTask).mockResolvedValue(detail({ number: 1 }));
+    useDeck.setState({ scope: { kind: "project", path: "/home/test/alpha" }, openTask: 1, detail: detail({ number: 1 }) });
+    await useDeck.getState().selectScope({ kind: "project", path: "/home/test/alpha" });
+    expect(useDeck.getState().openTask).toBe(1);
+  });
+});
+
 describe("marks", () => {
   it("drops the mark of a task that leaves the board", async () => {
     useDeck.setState({ scope: { kind: "all" } });
