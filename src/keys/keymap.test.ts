@@ -94,6 +94,8 @@ describe("keymap", () => {
     const keyless: [ActionId, boolean][] = [
       ["help.docs", true],
       ["help.docs", false],
+      ["updates.check", true],
+      ["updates.check", false],
       ["zoom.in", true],
       ["zoom.out", true],
       ["zoom.reset", true],

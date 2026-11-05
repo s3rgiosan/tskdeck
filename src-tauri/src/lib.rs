@@ -3,21 +3,24 @@ pub mod commands;
 pub mod menu;
 pub mod settings;
 pub mod tsk;
+pub mod updates;
 pub mod watch;
 pub mod windows;
 
 use std::path::PathBuf;
-use std::sync::{Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use tauri::{Emitter, Manager};
 
 use commands::AppState;
+use updates::{UPDATE_AVAILABLE_EVENT, UpdateManager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // The main window reopens at its last size and position; settings always opens centred.
         .plugin(
             tauri_plugin_window_state::Builder::new()
@@ -60,6 +63,21 @@ pub fn run() {
                 settings_path,
                 watcher,
             });
+
+            let emitter = app.handle().clone();
+            let updates = Arc::new(UpdateManager::new(
+                Arc::new(updates::PluginSource::new(app.handle().clone())),
+                Arc::new(move |update| {
+                    let _ = emitter.emit(UPDATE_AVAILABLE_EVENT, update);
+                }),
+            ));
+            let schedule_handle = app.handle().clone();
+            tauri::async_runtime::spawn(updates::run_schedule(Arc::clone(&updates), move || {
+                let state = schedule_handle.state::<AppState>();
+                let settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+                settings.check_for_updates
+            }));
+            app.manage(updates);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -76,6 +94,9 @@ pub fn run() {
             commands::save_settings,
             commands::relocate_tsk,
             commands::open_settings,
+            commands::check_for_updates,
+            commands::pending_update,
+            commands::install_update,
             chrome::reduce_transparency,
             menu::menu_state,
             menu::show_task_menu,

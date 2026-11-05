@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { requestTskCheck } from "../api/client";
 import type { OpenMode } from "../api/types";
 import { useDeck } from "../state/store";
+import { UpdateCheck } from "../updates/UpdateCheck";
 
-/** The General pane: where a task opens and where tsk lives. Each change is saved as it is made. */
+/** The General pane: where a task opens, where tsk lives and update checks. Each change is saved as it is made. */
 export function GeneralSettings() {
   const settings = useDeck((s) => s.settings);
   const saveSettings = useDeck((s) => s.saveSettings);
@@ -34,6 +35,10 @@ export function GeneralSettings() {
 
   function chooseMode(openMode: OpenMode) {
     void saveSettings({ ...useDeck.getState().settings, openMode });
+  }
+
+  function setUpdateChecks(checkForUpdates: boolean) {
+    void saveSettings({ ...useDeck.getState().settings, checkForUpdates });
   }
 
   return (
@@ -76,6 +81,12 @@ export function GeneralSettings() {
           {detectError}
         </p>
       )}
+      <span className="form-label">Updates:</span>
+      <label>
+        <input type="checkbox" checked={settings.checkForUpdates} onChange={(e) => setUpdateChecks(e.target.checked)} />{" "}
+        Check for updates automatically
+      </label>
+      <UpdateCheck />
     </div>
   );
 }

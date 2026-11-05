@@ -47,7 +47,7 @@ describe("api", () => {
   it("invokes set_archived and save_settings", async () => {
     await api.setArchived(3, true);
     expect(invoke).toHaveBeenCalledWith("set_archived", { number: 3, archived: true });
-    const settings = { openMode: "overlay", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {} } as const;
+    const settings = { openMode: "overlay", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true } as const;
     await api.saveSettings(settings);
     expect(invoke).toHaveBeenCalledWith("save_settings", { settings });
   });

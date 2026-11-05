@@ -7,6 +7,7 @@ import { resolveKeymap } from "../keys/keymap";
 import type { Handler, Handlers } from "../keys/useKeymap";
 import { useKeymap } from "../keys/useKeymap";
 import { useDeck } from "../state/store";
+import { UpdateCard } from "../updates/UpdateCard";
 import { usePullDownChoice } from "./PullDown";
 import type { SymbolName } from "./SymbolIcon";
 import { SymbolIcon } from "./SymbolIcon";
@@ -283,6 +284,7 @@ export function Sidebar(props: { onRename: (path: string) => void }) {
           {items.length === 0 && <div className="side-empty">{filter?.section === name ? "No match" : "None"}</div>}
         </div>
       ))}
+      <UpdateCard />
     </nav>
   );
 }

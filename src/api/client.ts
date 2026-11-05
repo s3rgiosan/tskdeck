@@ -17,6 +17,9 @@ import type {
   TaskRow,
   TskError,
   TskInfo,
+  UpdateCheckResult,
+  UpdateInfo,
+  UpdateProgress,
 } from "./types";
 
 export const api = {
@@ -41,6 +44,12 @@ export const api = {
   relocateTsk: () => invoke<void>("relocate_tsk"),
   /** Opens the settings window, or brings it to the front. */
   openSettings: () => invoke<void>("open_settings"),
+  /** Looks for a newer release now. Rejects with a plain string, not a TskError. */
+  checkForUpdates: () => invoke<UpdateInfo | null>("check_for_updates"),
+  /** The release the last successful check found. */
+  pendingUpdate: () => invoke<UpdateInfo | null>("pending_update"),
+  /** Downloads and installs the pending update, then relaunches. Rejects with a plain string, not a TskError. */
+  installUpdate: () => invoke<void>("install_update"),
 };
 
 export type Api = typeof api;
@@ -53,6 +62,21 @@ export function onBoardChanged(cb: () => void): Promise<() => void> {
 /** Calls `cb` with the settings each time any window saves them. */
 export function onSettingsChanged(cb: (settings: Settings) => void): Promise<() => void> {
   return listen<Settings>("settings-changed", (e) => cb(e.payload));
+}
+
+/** Calls `cb` after each successful check for updates, with the release found or null. */
+export function onUpdateAvailable(cb: (update: UpdateInfo | null) => void): Promise<() => void> {
+  return listen<UpdateInfo | null>("update-available", (e) => cb(e.payload));
+}
+
+/** Calls `cb` with the result of a check started from the app menu. */
+export function onUpdateCheckResult(cb: (result: UpdateCheckResult) => void): Promise<() => void> {
+  return listen<UpdateCheckResult>("update-check-result", (e) => cb(e.payload));
+}
+
+/** Calls `cb` with the download progress while an update downloads. */
+export function onUpdateProgress(cb: (progress: UpdateProgress) => void): Promise<() => void> {
+  return listen<UpdateProgress>("update-progress", (e) => cb(e.payload));
 }
 
 /** Asks the main window to look for tsk again. */

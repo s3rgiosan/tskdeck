@@ -2,7 +2,7 @@
 
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::sync::{Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -13,6 +13,7 @@ use crate::tsk::locate;
 use crate::tsk::model::{AddResult, TaskDetail, TaskRow};
 use crate::tsk::runner::{Tsk, TskError};
 use crate::tsk::version::{MIN_TSK, parse_version};
+use crate::updates::{UPDATE_PROGRESS_EVENT, UpdateInfo, UpdateManager};
 use crate::watch::StoreWatcher;
 
 /// The event every window receives with the settings just saved.
@@ -295,6 +296,39 @@ pub async fn relocate_tsk(app: AppHandle) -> Result<(), String> {
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Looks for a newer release now; resolves to it, or to `None` when tskdeck is current.
+#[tauri::command]
+pub async fn check_for_updates(
+    updates: State<'_, Arc<UpdateManager>>,
+) -> Result<Option<UpdateInfo>, String> {
+    updates.check_now().await.map_err(|e| e.to_string())
+}
+
+/// The release the last successful check found.
+#[tauri::command]
+pub fn pending_update(updates: State<'_, Arc<UpdateManager>>) -> Option<UpdateInfo> {
+    updates.pending()
+}
+
+/// Downloads and installs the pending update, emitting `update-progress` along the way, then
+/// relaunches the app.
+#[tauri::command]
+pub async fn install_update(
+    app: AppHandle,
+    updates: State<'_, Arc<UpdateManager>>,
+) -> Result<(), String> {
+    let emitter = app.clone();
+    let progress = move |progress| {
+        let _ = emitter.emit(UPDATE_PROGRESS_EVENT, progress);
+    };
+    updates
+        .install(&progress)
+        .await
+        .map_err(|e| e.to_string())?;
+    app.request_restart();
+    Ok(())
 }
 
 #[cfg(test)]
