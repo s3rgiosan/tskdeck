@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-06
+
 ### Added
 
 - Update checks: tskdeck looks for a newer release one minute after launch and then once a day, and a card at the foot of the sidebar installs it and relaunches the app, or hides it with Later until the app quits.
@@ -44,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A content security policy for the app's windows, and an absolute path required for the `tsk` binary in Settings.
 
-[Unreleased]: https://github.com/s3rgiosan/tskdeck/compare/1.0.1...HEAD
+[Unreleased]: https://github.com/s3rgiosan/tskdeck/compare/1.1.0...HEAD
+[1.1.0]: https://github.com/s3rgiosan/tskdeck/compare/1.0.1...1.1.0
 [1.0.1]: https://github.com/s3rgiosan/tskdeck/compare/1.0.0...1.0.1
 [1.0.0]: https://github.com/s3rgiosan/tskdeck/releases/tag/1.0.0
