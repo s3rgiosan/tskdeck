@@ -1,6 +1,6 @@
 [package]
 name = "tskdeck"
-version = "1.0.1"
+version = "1.1.0"
 description = "Unofficial desktop client for the tsk task board"
 authors = ["Sérgio Santos"]
 edition = "2024"
