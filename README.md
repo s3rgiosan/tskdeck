@@ -44,15 +44,15 @@ Download the installer for your platform from the [Releases](https://github.com/
 - Linux: the `.AppImage` or `.deb`.
 - Windows: the `.msi`.
 
-Releases are unsigned.
+Releases are not notarized or code-signed by a publisher. The macOS app has an ad-hoc signature only.
 
 ### Updates
 
 tskdeck looks for a newer release one minute after launch, and then once a day. When it finds one, a card at the foot of the sidebar shows **Install and Relaunch** and **Later**. To check at once, choose **Check for Updates…** in the app menu on macOS, or in the command palette. To stop the automatic checks, clear **Check for updates automatically** in Settings → General.
 
-### Opening the unsigned app on macOS
+### Opening the app on macOS
 
-Move `tskdeck.app` to `/Applications`, then either right-click it and choose Open, or remove the quarantine flag:
+The macOS build is ad-hoc signed and not notarized, so macOS says that it is damaged on first launch. Move `tskdeck.app` to `/Applications`, then remove the quarantine flag:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/tskdeck.app

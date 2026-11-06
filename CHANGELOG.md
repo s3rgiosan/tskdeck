@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-06
+
+### Fixed
+
+- The macOS app has a valid ad-hoc signature on the whole app bundle. Before, only the binary had a signature, so `codesign --verify` rejected the app.
+
 ## [1.1.0] - 2026-11-06
 
 ### Added
@@ -46,7 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A content security policy for the app's windows, and an absolute path required for the `tsk` binary in Settings.
 
-[Unreleased]: https://github.com/s3rgiosan/tskdeck/compare/1.1.0...HEAD
+[Unreleased]: https://github.com/s3rgiosan/tskdeck/compare/1.1.1...HEAD
+[1.1.1]: https://github.com/s3rgiosan/tskdeck/compare/1.1.0...1.1.1
 [1.1.0]: https://github.com/s3rgiosan/tskdeck/compare/1.0.1...1.1.0
 [1.0.1]: https://github.com/s3rgiosan/tskdeck/compare/1.0.0...1.0.1
 [1.0.0]: https://github.com/s3rgiosan/tskdeck/releases/tag/1.0.0
