@@ -127,7 +127,7 @@ function listScope(scope: { kind: string; path?: string; name?: string }, option
 function handle(cmd: string, payload: Record<string, unknown> = {}): unknown {
   switch (cmd) {
     case "tsk_info":
-      return { path: SETTINGS.tskPath, version: "1.0.0", supported: true, minimum: "1.0.0" };
+      return { path: SETTINGS.tskPath, version: "1.0.0", supported: true, minimum: "1.0.0", projectTitles: true };
     case "list_scope":
       return listScope(payload.scope as { kind: string }, payload.options as ListOptions);
     case "get_task": {
@@ -139,6 +139,13 @@ function handle(cmd: string, payload: Record<string, unknown> = {}): unknown {
       return SETTINGS;
     case "capture":
       return TASKS.length + 1;
+    case "set_project_title": {
+      const title = typeof payload.title === "string" ? payload.title : null;
+      const folded = title?.toLowerCase();
+      if (folded === "desk") throw { kind: "refused", code: "invalid-title", message: "desk names the desk, not a project" };
+      for (const r of TASKS) if (r.project === payload.path) r.project_title = title;
+      return null;
+    }
     case "set_status":
     case "edit_task":
     case "step":

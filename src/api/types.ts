@@ -60,6 +60,8 @@ export interface TaskRow {
   title: string;
   status: Status;
   project: string | null;
+  /** The name the project shows under; tsk omits it when the project has no title. */
+  project_title?: string | null;
   thread: string | null;
   assignee: string | null;
   assignee_kind: string | null;
@@ -184,7 +186,10 @@ export interface Settings {
   keymap: Record<string, string[]>;
   tskPath: string | null;
   sidebarHidden: boolean;
-  /** Names given to projects in tskdeck, keyed by the project's full path. */
+  /**
+   * Names given to projects in tskdeck, keyed by the project's full path. tskdeck shows them when tsk
+   * keeps no project titles; with titles, it holds only the names tsk has not taken yet.
+   */
   projectNames: Record<string, string>;
   /** Whether tskdeck looks for a newer release after launch and once a day. */
   checkForUpdates: boolean;
@@ -214,4 +219,6 @@ export interface TskInfo {
   version: string;
   supported: boolean;
   minimum: string;
+  /** Whether this tsk keeps project titles (tsk 0.14.0 and later). */
+  projectTitles: boolean;
 }

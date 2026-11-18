@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { CaptureInput, Scope } from "../api/types";
 import { scopeTitle, sidebarModel } from "../board/sidebar";
 import { useDeck } from "../state/store";
+import { useProjectNames } from "../state/projectNames";
 import { Modal } from "./Modal";
 
 /** Where a task captured from `scope` lands: a project scope names the project, a thread scope the thread, an assignee scope the assignee; the rest is the desk. */
@@ -38,7 +39,10 @@ export function CaptureDialog(props: { onClose: () => void }) {
   const scope = useDeck((s) => s.scope);
   const capture = useDeck((s) => s.capture);
   const allRows = useDeck((s) => s.allRows);
-  const projectNames = useDeck((s) => s.settings.projectNames);
+  const listedRows = useDeck((s) => s.listedRows);
+  // The listed rows are included so a project with no live rows gets its name on the done or archived shelf.
+  const shownRows = useMemo(() => [...allRows, ...listedRows], [allRows, listedRows]);
+  const projectNames = useProjectNames(shownRows);
   const projectLabel = useMemo(
     () => scopeTitle(scope, sidebarModel(allRows, projectNames), projectNames),
     [scope, allRows, projectNames],

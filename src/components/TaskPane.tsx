@@ -11,6 +11,7 @@ import { isTextTarget, resolveKeymap } from "../keys/keymap";
 import type { Handler, Handlers } from "../keys/useKeymap";
 import { useKeymap } from "../keys/useKeymap";
 import { useDeck } from "../state/store";
+import { useProjectNames } from "../state/projectNames";
 import { dateOf, formatWhen } from "../when";
 import { BlockCard } from "./BlockCard";
 import { Clamp } from "./Clamp";
@@ -428,11 +429,14 @@ export function TaskPane() {
   const run = useDeck((s) => s.run);
   const keymap = useMemo(() => resolveKeymap(settings.keymap), [settings.keymap]);
   const allRows = useDeck((s) => s.allRows);
-  // The task is included so a project with no live rows left still gets its label.
+  // The task is included so a project with no live rows left still gets its label. It comes first, so the
+  // fresher listing's title wins while the task is read again.
+  const shownRows = useMemo(() => (task ? [task, ...allRows] : allRows), [allRows, task]);
+  const projectNames = useProjectNames(shownRows);
   const projectLabel = useMemo(() => {
     if (!task?.project) return "Desk";
-    return projectLabelsOf([...allRows, task], settings.projectNames).get(task.project) ?? task.project;
-  }, [allRows, task, settings.projectNames]);
+    return projectLabelsOf(shownRows, projectNames).get(task.project) ?? task.project;
+  }, [shownRows, task, projectNames]);
 
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);

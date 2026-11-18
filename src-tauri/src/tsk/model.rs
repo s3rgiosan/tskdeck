@@ -104,6 +104,9 @@ pub struct TaskRow {
     pub title: String,
     pub status: Status,
     pub project: Option<String>,
+    /// The name the project shows under. tsk omits it when the project has no title.
+    #[serde(default)]
+    pub project_title: Option<String>,
     pub thread: Option<String>,
     pub assignee: Option<String>,
     pub assignee_kind: Option<String>,
@@ -167,6 +170,8 @@ mod tests {
             serde_json::from_str(include_str!("../../tests/fixtures/rows.json")).unwrap();
         assert_eq!(rows.len(), 4);
         assert_eq!(rows[0].project, None);
+        assert_eq!(rows[1].project_title, None);
+        assert_eq!(rows[2].project_title.as_deref(), Some("Client Site"));
         assert_eq!(rows[3].block.as_ref().unwrap().on, "task:7");
     }
 

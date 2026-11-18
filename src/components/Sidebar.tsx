@@ -7,6 +7,7 @@ import { resolveKeymap } from "../keys/keymap";
 import type { Handler, Handlers } from "../keys/useKeymap";
 import { useKeymap } from "../keys/useKeymap";
 import { useDeck } from "../state/store";
+import { useProjectNames } from "../state/projectNames";
 import { UpdateCard } from "../updates/UpdateCard";
 import { usePullDownChoice } from "./PullDown";
 import type { SymbolName } from "./SymbolIcon";
@@ -54,7 +55,8 @@ export function Sidebar(props: { onRename: (path: string) => void }) {
   const modalOpen = useDeck((s) => s.modalOpen);
   const selectScope = useDeck((s) => s.selectScope);
   const keymap = useMemo(() => resolveKeymap(settings.keymap), [settings.keymap]);
-  const model = useMemo(() => sidebarModel(allRows, settings.projectNames), [allRows, settings.projectNames]);
+  const projectNames = useProjectNames(allRows);
+  const model = useMemo(() => sidebarModel(allRows, projectNames), [allRows, projectNames]);
   // The project whose context menu is open.
   const menuProject = useRef<string | null>(null);
 

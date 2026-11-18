@@ -18,7 +18,7 @@ import { groupChoices, sortChoices } from "../board/choices";
 import { applyOptimistic } from "../board/optimistic";
 import { buildBoard, liveNumbersOf } from "../board/sections";
 import type { ProjectNames } from "../board/sidebar";
-import { onDesk, projectLabelsOf, sameScope, sortByProject } from "../board/sidebar";
+import { onDesk, projectLabelsOf, projectNamesOf, sameScope, sortByProject } from "../board/sidebar";
 import type { Change, Command, UndoEntry } from "../board/undo";
 import { inverseOf } from "../board/undo";
 
@@ -101,8 +101,11 @@ export interface DeckState {
   markStep: (delta: number) => void;
   clearMarks: () => void;
   saveSettings: (settings: Settings) => Promise<void>;
-  /** Saves the name tskdeck shows for a project; a blank name clears it. */
-  renameProject: (path: string, name: string) => Promise<void>;
+  /**
+   * Names a project; a blank name brings back its folder name. tsk keeps the name as the project's
+   * title; a tsk without titles leaves it in tskdeck's settings. Resolves to tsk's refusal, or null.
+   */
+  renameProject: (path: string, name: string) => Promise<string | null>;
   /** Takes settings saved by another window; returns whether the tsk path changed. */
   applySettings: (settings: Settings) => boolean;
   /** Looks for tsk again, for example after the path setting changed. */
@@ -133,9 +136,90 @@ export function filterRows(rows: TaskRow[], query: string, index: Map<number, Se
  * Listed rows in board order. tsk sorts projects by folder name, so Sort By Project is redone here by
  * project label, which keeps projects that share a folder name apart and follows the names given to them.
  */
-function listedOrder(rows: TaskRow[], options: ListOptions, allRows: TaskRow[], names: ProjectNames): TaskRow[] {
+function listedOrder(rows: TaskRow[], options: ListOptions, allRows: TaskRow[], state: DeckState): TaskRow[] {
   if (options.sort !== "project") return rows;
-  return sortByProject(rows, projectLabelsOf([...allRows, ...rows], names));
+  const shown = [...allRows, ...rows];
+  return sortByProject(rows, projectLabelsOf(shown, namesShown(state, shown)));
+}
+
+/** The project names to show for `rows`: tsk's titles, or the names kept in settings on a tsk without titles. */
+function namesShown(state: DeckState, rows: TaskRow[]): ProjectNames {
+  return projectNamesOf(rows, state.tsk?.projectTitles ?? false, state.settings.projectNames);
+}
+
+/** Why tsk can't take `title` as a project title, or null. tsk reads a leading "-" as an option. */
+function titleProblem(title: string): string | null {
+  return title.startsWith("-") ? "A project name can't start with “-”." : null;
+}
+
+/** The settings without the project names kept for `paths`. */
+function withoutNames(settings: Settings, paths: string[]): Settings {
+  const projectNames = { ...settings.projectNames };
+  for (const path of paths) delete projectNames[path];
+  return { ...settings, projectNames };
+}
+
+/** The paths of the projects that tsk titles, from live, done and archived tasks; null when tsk can't list them. */
+async function titledPaths(): Promise<Set<string> | null> {
+  try {
+    const shelves = await Promise.all(SHELVES.map((shelf) => api.listScope({ kind: "all" }, { ...LIVE, shelf })));
+    return new Set(Object.keys(projectNamesOf(shelves.flat(), true, {})));
+  } catch {
+    return null;
+  }
+}
+
+const SHELVES = ["live", "done", "archived"] as const;
+
+let movingNames = false;
+
+/** The running move of project names into tsk; a rename waits for it. */
+let namesMoved: Promise<void> = Promise.resolve();
+
+/**
+ * Moves the project names kept in settings into tsk as project titles, one time. A project that has a
+ * title already keeps it. A name tsk refuses stays in settings for the next try, and one alert lists
+ * each refusal. When tsk can't list the titled projects, the names wait for the next launch.
+ */
+async function moveNamesToTsk(set: Set_, get: Get_): Promise<void> {
+  const { tsk, settings } = get();
+  const entries = Object.entries(settings.projectNames);
+  if (movingNames || !tsk?.projectTitles || entries.length === 0) return;
+  movingNames = true;
+  try {
+    const titled = await titledPaths();
+    if (titled === null) return;
+    const done: string[] = [];
+    const refused: string[] = [];
+    let titledNow = false;
+    for (const [path, name] of entries) {
+      const title = name.trim();
+      if (titled.has(path) || title === "") {
+        done.push(path);
+        continue;
+      }
+      const problem = titleProblem(title);
+      if (problem !== null) {
+        refused.push(`${title} (${path}): ${problem}`);
+        continue;
+      }
+      try {
+        await api.setProjectTitle(path, title);
+        done.push(path);
+        titledNow = true;
+      } catch (e) {
+        refused.push(`${title} (${path}): ${messageOf(e)}`);
+      }
+    }
+    if (done.length > 0) await queueSave(set, get, (current) => withoutNames(current, done));
+    if (titledNow) await get().refresh();
+    if (refused.length > 0) {
+      const text = [...refused, "tskdeck keeps these names and tries again at the next launch."].join("\n");
+      set(failure("Some project names couldn't be moved to tsk", text));
+    }
+  } finally {
+    movingNames = false;
+  }
 }
 
 /** Rows in the order the board shows them. */
@@ -402,6 +486,8 @@ export const useDeck = create<DeckState>()((set, get) => ({
       if (tsk) set({ tsk });
       if (!tsk || !tsk.supported) return;
       await get().refresh();
+      namesMoved = moveNamesToTsk(set, get);
+      await namesMoved;
       if (onWindowFocus === null) {
         onWindowFocus = () => void get().refresh();
         window.addEventListener("focus", onWindowFocus);
@@ -431,7 +517,7 @@ export const useDeck = create<DeckState>()((set, get) => ({
       const all = api.listScope({ kind: "all" }, LIVE);
       const [allRows, listed] = await Promise.all([all, listBoard(scope, options, all)]);
       if (seq !== refreshSeq) return;
-      const rows = listedOrder(listed, options, allRows, get().settings.projectNames);
+      const rows = listedOrder(listed, options, allRows, get());
       const { cursor, pendingCursor, openTask, query, searchIndex, marks } = get();
       // The board as last listed: an optimistic write may already have taken the cursor task off `rows`.
       const before = boardOrder(filterRows(get().listedRows, query, searchIndex), get().allRows);
@@ -681,14 +767,36 @@ export const useDeck = create<DeckState>()((set, get) => ({
 
   async renameProject(path, name) {
     const trimmed = name.trim();
-    await queueSave(set, get, (current) => {
-      const projectNames = { ...current.projectNames };
-      if (trimmed === "") delete projectNames[path];
-      else projectNames[path] = trimmed;
-      return { ...current, projectNames };
-    });
-    const { rows, listedRows, options, allRows, settings } = get();
-    const names = settings.projectNames;
-    set({ rows: listedOrder(rows, options, allRows, names), listedRows: listedOrder(listedRows, options, allRows, names) });
+    if (!get().tsk?.projectTitles) {
+      await queueSave(set, get, (current) => {
+        const projectNames = { ...current.projectNames };
+        if (trimmed === "") delete projectNames[path];
+        else projectNames[path] = trimmed;
+        return { ...current, projectNames };
+      });
+      const { rows, listedRows, options, allRows } = get();
+      set({ rows: listedOrder(rows, options, allRows, get()), listedRows: listedOrder(listedRows, options, allRows, get()) });
+      return null;
+    }
+    const problem = trimmed === "" ? null : titleProblem(trimmed);
+    if (problem !== null) return problem;
+    await namesMoved;
+    try {
+      await api.setProjectTitle(path, trimmed === "" ? null : trimmed);
+    } catch (e) {
+      return messageOf(e);
+    }
+    const before = get().error;
+    // A name tskdeck still keeps for the project gives way to the title tsk has now.
+    const kept = get().settings.projectNames;
+    if (path in kept) await queueSave(set, get, (current) => withoutNames(current, [path]));
+    await get().refresh();
+    // The dialog clears the store's failure when it closes, so a failure after the title was set stays in it.
+    const after = get().error;
+    if (after !== null && after !== before) {
+      set({ error: null, errorTitle: null, errorTask: null });
+      return after;
+    }
+    return null;
   },
 }));

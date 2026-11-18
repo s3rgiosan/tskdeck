@@ -23,6 +23,7 @@ vi.mock("../api/client", async (importOriginal) => {
       step: vi.fn(),
       reply: vi.fn(),
       setArchived: vi.fn(),
+      setProjectTitle: vi.fn(),
       getSettings: vi.fn(),
       saveSettings: vi.fn(),
       relocateTsk: vi.fn(),

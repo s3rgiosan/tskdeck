@@ -36,6 +36,9 @@ export const api = {
     invoke<void>("reply", { number, text, send }),
   setArchived: (number: number, archived: boolean) =>
     invoke<void>("set_archived", { number, archived }),
+  /** Shows the project at `path` under `title`, or under its folder name when `title` is null. */
+  setProjectTitle: (path: string, title: string | null) =>
+    invoke<void>("set_project_title", { path, title }),
   // Rejects with a plain string, not a TskError.
   getSettings: () => invoke<Settings>("get_settings"),
   // Rejects with a plain string, not a TskError.

@@ -321,6 +321,16 @@ pub fn archive_args(number: u64, archived: bool) -> Vec<String> {
     vec![command.into(), task(number)]
 }
 
+/// Sets the title of the project at `path`, or removes it when `title` is `None`.
+pub fn project_title_args(path: &str, title: Option<&str>) -> Vec<String> {
+    let mut args = vec!["project".to_string(), "title".into(), path.to_string()];
+    match title {
+        Some(title) => args.push(title.to_string()),
+        None => args.push("--clear".into()),
+    }
+    args
+}
+
 fn task(number: u64) -> String {
     format!("T{number}")
 }
@@ -713,6 +723,18 @@ mod tests {
     fn archive_and_restore() {
         assert_eq!(archive_args(7, true), s(&["archive", "T7"]));
         assert_eq!(archive_args(7, false), s(&["unarchive", "T7"]));
+    }
+
+    #[test]
+    fn project_title_sets_and_clears() {
+        assert_eq!(
+            project_title_args("/home/test/a", Some("Site A")),
+            s(&["project", "title", "/home/test/a", "Site A"])
+        );
+        assert_eq!(
+            project_title_args("/home/test/a", None),
+            s(&["project", "title", "/home/test/a", "--clear"])
+        );
     }
 
     #[test]

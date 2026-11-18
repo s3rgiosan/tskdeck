@@ -24,7 +24,8 @@ pub struct Settings {
     pub keymap: BTreeMap<String, Vec<String>>,
     pub tsk_path: Option<PathBuf>,
     pub sidebar_hidden: bool,
-    /// Names given to projects in tskdeck, keyed by the project's full path.
+    /// Names given to projects in tskdeck, keyed by the project's full path. tskdeck shows them
+    /// when tsk keeps no project titles; with titles, it holds only the names tsk has not taken yet.
     pub project_names: BTreeMap<String, String>,
     /// Whether tskdeck looks for a newer release after launch and once a day.
     pub check_for_updates: bool,
