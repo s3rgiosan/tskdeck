@@ -15,8 +15,21 @@ export interface SidebarModel {
   assignees: SidebarItem[];
 }
 
-/** Names given to projects in tskdeck, keyed by the project's full path. */
+/** Names of projects, keyed by the project's full path. */
 export type ProjectNames = Record<string, string>;
+
+/**
+ * The project names to show: the titles tsk puts on `rows` when `titles` is true, or else the names
+ * kept in tskdeck's settings.
+ */
+export function projectNamesOf(rows: TaskRow[], titles: boolean, local: ProjectNames): ProjectNames {
+  if (!titles) return local;
+  const names: ProjectNames = {};
+  for (const row of rows) {
+    if (row.project && row.project_title) names[row.project] = row.project_title;
+  }
+  return names;
+}
 
 export function sidebarModel(allRows: TaskRow[], names: ProjectNames = {}): SidebarModel {
   const deskCount = allRows.filter(onDesk).length;
@@ -39,12 +52,12 @@ export function sidebarModel(allRows: TaskRow[], names: ProjectNames = {}): Side
   };
 }
 
-/** The name the sidebar gives a scope; a project with no rows left is named by its given name or its folder. */
 /** True when both scopes name the same view, project, thread or assignee. */
 export function sameScope(a: Scope, b: Scope): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+/** The name the sidebar gives a scope; a project with no rows left is named by its given name or its folder. */
 export function scopeTitle(scope: Scope, model: SidebarModel, names: ProjectNames = {}): string {
   switch (scope.kind) {
     case "desk":

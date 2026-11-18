@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { row } from "../test/fixtures";
-import { onDesk, projectLabelsOf, scopeTitle, sidebarModel, sortByProject } from "./sidebar";
+import { onDesk, projectLabelsOf, projectNamesOf, scopeTitle, sidebarModel, sortByProject } from "./sidebar";
 
 describe("sidebarModel", () => {
   it("disambiguates colliding basenames", () => {
@@ -97,6 +97,23 @@ describe("projectLabelsOf", () => {
         ["/home/test/b/wp-content", "wp-content"],
       ]),
     );
+  });
+});
+
+describe("projectNamesOf", () => {
+  const rows = [
+    row({ project: "/home/test/a", project_title: "Alpha" }),
+    row({ project: "/home/test/b" }),
+    row({ project: null }),
+  ];
+  const local = { "/home/test/b": "Beta" };
+
+  it("reads the titles tsk puts on the rows", () => {
+    expect(projectNamesOf(rows, true, local)).toEqual({ "/home/test/a": "Alpha" });
+  });
+
+  it("uses the names kept in settings on a tsk without titles", () => {
+    expect(projectNamesOf(rows, false, local)).toBe(local);
   });
 });
 

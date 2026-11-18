@@ -7,7 +7,7 @@ use std::path::Path;
 use tskdeck_lib::tsk::args::*;
 use tskdeck_lib::tsk::locate::{default_candidates, locate};
 use tskdeck_lib::tsk::model::*;
-use tskdeck_lib::tsk::runner::Tsk;
+use tskdeck_lib::tsk::runner::{Tsk, TskError};
 
 fn tsk_for(store: &Path) -> Tsk {
     let home = dirs::home_dir();
@@ -335,4 +335,57 @@ fn contract_steps_edit_status_and_scopes() {
     tsk.run(&archive_args(n, false)).unwrap();
     assert!(on_shelf(Shelf::Archived).is_empty());
     assert!(on_shelf(Shelf::Done).iter().any(|r| r.number == n));
+}
+
+#[test]
+#[ignore]
+fn contract_project_titles() {
+    let store = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let tsk = tsk_for(store.path());
+    let added: AddResult = tsk
+        .json(&add_args(&CaptureInput {
+            project: Some(project.path().to_string_lossy().into_owned()),
+            ..capture("titled")
+        }))
+        .unwrap();
+    // tsk stores the project's canonical path; tskdeck names a project by the path on its rows.
+    let path = detail(&tsk, added.number).row.project.expect("project row");
+
+    // tsk trims the title and joins inner whitespace
+    tsk.run(&project_title_args(&path, Some("  Site   A ")))
+        .unwrap();
+    assert_eq!(
+        detail(&tsk, added.number).row.project_title.as_deref(),
+        Some("Site A")
+    );
+    let rows: Vec<TaskRow> = tsk.json(&list_args(&Scope::All, &live())).unwrap();
+    assert_eq!(rows[0].project_title.as_deref(), Some("Site A"));
+
+    // refusals carry a code; a title in use elsewhere is taken whatever its case
+    let other = tempfile::tempdir().unwrap();
+    let second: AddResult = tsk
+        .json(&add_args(&CaptureInput {
+            project: Some(other.path().to_string_lossy().into_owned()),
+            ..capture("other")
+        }))
+        .unwrap();
+    let other_path = detail(&tsk, second.number)
+        .row
+        .project
+        .expect("project row");
+    for (target, title, code) in [
+        (&path, "a/b", "invalid-title"),
+        (&path, "desk", "invalid-title"),
+        (&other_path, "site a", "title-taken"),
+    ] {
+        match tsk.run(&project_title_args(target, Some(title))) {
+            Err(TskError::Refused { code: got, .. }) => assert_eq!(got, code),
+            other => panic!("expected {code} for {title}, got {other:?}"),
+        }
+    }
+
+    // --clear removes the title, and tsk then omits the field
+    tsk.run(&project_title_args(&path, None)).unwrap();
+    assert_eq!(detail(&tsk, added.number).row.project_title, None);
 }

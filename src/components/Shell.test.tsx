@@ -38,6 +38,7 @@ vi.mock("../api/client", async (importOriginal) => {
       step: vi.fn(),
       reply: vi.fn(),
       setArchived: vi.fn(),
+      setProjectTitle: vi.fn(),
       getSettings: vi.fn(),
       saveSettings: vi.fn(),
       relocateTsk: vi.fn(),
@@ -72,8 +73,8 @@ function subscriber<T extends (...args: never[]) => void>(subscribe: (cb: T) => 
   }) as T;
 }
 
-async function mountWith(rows: TaskRow[]) {
-  vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0" });
+async function mountWith(rows: TaskRow[], { projectTitles = false } = {}) {
+  vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0", projectTitles });
   vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true });
   vi.mocked(api.listScope).mockResolvedValue(rows);
   vi.mocked(api.setStatus).mockResolvedValue();
@@ -164,7 +165,7 @@ describe("palette and settings keys", () => {
 
 describe("loading", () => {
   it("shows a spinner on the board until the first listing arrives", async () => {
-    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0" });
+    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0", projectTitles: false });
     vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true });
     vi.mocked(api.listScope).mockReturnValue(new Promise(() => {}));
     vi.mocked(onBoardChanged).mockResolvedValue(() => {});
@@ -241,7 +242,7 @@ describe("dialogs and errors", () => {
     expect(useDeck.getState().modalOpen).toBe(false);
     await userEvent.keyboard("{Control>},{/Control}");
     expect(api.openSettings).toHaveBeenCalledTimes(1);
-    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0" });
+    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0", projectTitles: false });
     await userEvent.click(screen.getByRole("button", { name: "Check Again" }));
     await screen.findByRole("listbox", { name: "Tasks" });
     expect(screen.queryByRole("dialog", { name: "New Task" })).not.toBeInTheDocument();
@@ -319,7 +320,7 @@ describe("tsk missing screen", () => {
 
   it("looks for tsk again from the check again button", async () => {
     await mountMissing();
-    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0" });
+    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0", projectTitles: false });
     vi.mocked(api.listScope).mockResolvedValue([row({ number: 3, status: "ready" })]);
     await userEvent.click(screen.getByRole("button", { name: "Check Again" }));
     expect(await screen.findByRole("listbox", { name: "Tasks" })).toBeInTheDocument();
@@ -578,7 +579,7 @@ describe("sidebar", () => {
 
   it("starts hidden when the saved settings say so", async () => {
     vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: true, projectNames: {}, checkForUpdates: true });
-    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0" });
+    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0", projectTitles: false });
     vi.mocked(api.listScope).mockResolvedValue([row({ number: 3 })]);
     vi.mocked(onBoardChanged).mockResolvedValue(() => {});
     render(<Shell />);
@@ -714,7 +715,7 @@ describe("tasks over the board", () => {
 
 describe("board empty state", () => {
   it("offers New Task when the board has no tasks", async () => {
-    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0" });
+    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0", projectTitles: false });
     vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true });
     vi.mocked(api.listScope).mockResolvedValue([]);
     vi.mocked(onBoardChanged).mockResolvedValue(() => {});
@@ -1075,7 +1076,7 @@ describe("project names", () => {
   });
 
   it("starts the field with the project's current name", async () => {
-    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0" });
+    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0", projectTitles: false });
     vi.mocked(api.getSettings).mockResolvedValue({
       openMode: "beside",
       keymap: {},
@@ -1092,6 +1093,48 @@ describe("project names", () => {
     subscriber(onMenu)("pane-rename-project");
     const dialog = await screen.findByRole("dialog", { name: "Rename Project" });
     expect(within(dialog).getByRole("textbox", { name: "Name" })).toHaveValue("Alpha");
+  });
+
+  it("renames a project through tsk and shows the title tsk keeps", async () => {
+    await mountWith([row({ number: 3, status: "started", project: path })], { projectTitles: true });
+    vi.mocked(api.setProjectTitle).mockImplementation(async () => {
+      vi.mocked(api.listScope).mockResolvedValue([row({ number: 3, status: "started", project: path, project_title: "Alpha Site" })]);
+    });
+    const sidebar = screen.getByRole("navigation", { name: "Views" });
+    fireEvent.contextMenu(within(sidebar).getByText("wp-content"));
+    subscriber(onMenu)("pane-rename-project");
+    const dialog = await screen.findByRole("dialog", { name: "Rename Project" });
+    await userEvent.type(within(dialog).getByRole("textbox", { name: "Name" }), "  Alpha   Site {Enter}");
+    expect(api.setProjectTitle).toHaveBeenCalledWith(path, "Alpha   Site");
+    await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Rename Project" })).not.toBeInTheDocument());
+    expect(within(sidebar).getByText("Alpha Site")).toBeInTheDocument();
+    expect(api.saveSettings).not.toHaveBeenCalled();
+  });
+
+  it("keeps the rename sheet open with tsk's refusal", async () => {
+    await mountWith([row({ number: 3, status: "started", project: path })], { projectTitles: true });
+    vi.mocked(api.setProjectTitle).mockRejectedValue({ kind: "refused", code: "title-taken", message: "title alpha is used by /home/test/b" });
+    const sidebar = screen.getByRole("navigation", { name: "Views" });
+    fireEvent.contextMenu(within(sidebar).getByText("wp-content"));
+    subscriber(onMenu)("pane-rename-project");
+    const dialog = await screen.findByRole("dialog", { name: "Rename Project" });
+    const field = within(dialog).getByRole("textbox", { name: "Name" });
+    await userEvent.type(field, "Alpha{Enter}");
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("title alpha is used by /home/test/b");
+    expect(field).toHaveValue("Alpha");
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(within(dialog).getByRole("button", { name: "Rename" })).toBeEnabled();
+  });
+
+  it("starts the field with the title tsk keeps for the project", async () => {
+    await mountWith([row({ number: 3, status: "started", project: path, project_title: "Alpha" })], { projectTitles: true });
+    const sidebar = screen.getByRole("navigation", { name: "Views" });
+    fireEvent.contextMenu(within(sidebar).getByText("Alpha"));
+    subscriber(onMenu)("pane-rename-project");
+    const dialog = await screen.findByRole("dialog", { name: "Rename Project" });
+    const field = within(dialog).getByRole("textbox", { name: "Name" });
+    expect(field).toHaveValue("Alpha");
+    expect(field).toHaveAttribute("placeholder", "wp-content");
   });
 
   it("titles the window with a project's name", async () => {

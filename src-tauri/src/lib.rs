@@ -90,6 +90,7 @@ pub fn run() {
             commands::step,
             commands::reply,
             commands::set_archived,
+            commands::set_project_title,
             commands::get_settings,
             commands::save_settings,
             commands::relocate_tsk,

@@ -19,6 +19,7 @@ vi.mock("../api/client", async (importOriginal) => {
       step: vi.fn(),
       reply: vi.fn(),
       setArchived: vi.fn(),
+      setProjectTitle: vi.fn(),
       getSettings: vi.fn(),
       saveSettings: vi.fn(),
       relocateTsk: vi.fn(),
@@ -33,7 +34,7 @@ beforeEach(() => {
   resetBoardSubscription();
   vi.resetAllMocks();
   useDeck.setState(useDeck.getInitialState(), true);
-  vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0" });
+  vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0", projectTitles: false });
   vi.mocked(api.getSettings).mockResolvedValue(settings);
   vi.mocked(api.listScope).mockResolvedValue([row({ number: 1, status: "ready" })]);
   vi.mocked(onBoardChanged).mockResolvedValue(() => {});
@@ -331,6 +332,133 @@ describe("renameProject", () => {
     });
     await useDeck.getState().renameProject("/home/test/a", " ");
     expect(useDeck.getState().settings.projectNames).toEqual({ "/home/test/b": "Beta" });
+  });
+});
+
+describe("renameProject with project titles", () => {
+  const A = "/home/test/a";
+
+  beforeEach(async () => {
+    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.14.0", supported: true, minimum: "0.13.0", projectTitles: true });
+    vi.mocked(api.listScope).mockResolvedValue([row({ number: 1, status: "ready", project: A })]);
+    vi.mocked(api.saveSettings).mockResolvedValue();
+    await useDeck.getState().init();
+  });
+
+  it("sets the trimmed title in tsk and reads the board again", async () => {
+    vi.mocked(api.setProjectTitle).mockImplementation(async () => {
+      vi.mocked(api.listScope).mockResolvedValue([row({ number: 1, status: "ready", project: A, project_title: "Alpha" })]);
+    });
+    expect(await useDeck.getState().renameProject(A, "  Alpha  ")).toBeNull();
+    expect(api.setProjectTitle).toHaveBeenCalledWith(A, "Alpha");
+    expect(useDeck.getState().allRows[0].project_title).toBe("Alpha");
+    expect(api.saveSettings).not.toHaveBeenCalled();
+  });
+
+  it("clears the title when the new name is blank", async () => {
+    vi.mocked(api.setProjectTitle).mockResolvedValue();
+    expect(await useDeck.getState().renameProject(A, " ")).toBeNull();
+    expect(api.setProjectTitle).toHaveBeenCalledWith(A, null);
+  });
+
+  it("resolves to tsk's refusal", async () => {
+    vi.mocked(api.setProjectTitle).mockRejectedValue({ kind: "refused", code: "invalid-title", message: "desk names the desk, not a project" });
+    expect(await useDeck.getState().renameProject(A, "desk")).toBe("desk names the desk, not a project");
+  });
+
+  it("resolves to a failure to read the board after the title was set", async () => {
+    vi.mocked(api.setProjectTitle).mockResolvedValue();
+    vi.mocked(api.listScope).mockRejectedValue({ kind: "store", message: "store is locked" });
+    expect(await useDeck.getState().renameProject(A, "Alpha")).toBe("store is locked");
+    expect(useDeck.getState().error).toBeNull();
+  });
+
+  it("refuses a name that starts with a dash without running tsk", async () => {
+    expect(await useDeck.getState().renameProject(A, "-x")).toBe("A project name can't start with “-”.");
+    expect(api.setProjectTitle).not.toHaveBeenCalled();
+  });
+
+  it("drops a name kept in settings once tsk takes the title", async () => {
+    vi.mocked(api.setProjectTitle).mockResolvedValue();
+    useDeck.setState({ settings: { ...useDeck.getState().settings, projectNames: { [A]: "Old", "/home/test/b": "Beta" } } });
+    await useDeck.getState().renameProject(A, "Alpha");
+    expect(useDeck.getState().settings.projectNames).toEqual({ "/home/test/b": "Beta" });
+  });
+});
+
+describe("moving project names into tsk", () => {
+  const A = "/home/test/a";
+  const B = "/home/test/b";
+  const C = "/home/test/c";
+
+  function launchWith(projectNames: Record<string, string>, rows = [row({ number: 1, status: "ready", project: A })]) {
+    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.14.0", supported: true, minimum: "0.13.0", projectTitles: true });
+    vi.mocked(api.getSettings).mockResolvedValue({ ...settings, projectNames });
+    vi.mocked(api.listScope).mockResolvedValue(rows);
+    vi.mocked(api.saveSettings).mockResolvedValue();
+    return useDeck.getState().init();
+  }
+
+  it("sets each name as the project's title and removes it from settings", async () => {
+    vi.mocked(api.setProjectTitle).mockResolvedValue();
+    await launchWith({ [A]: " Alpha ", [B]: "Beta" });
+    expect(api.setProjectTitle).toHaveBeenCalledWith(A, "Alpha");
+    expect(api.setProjectTitle).toHaveBeenCalledWith(B, "Beta");
+    expect(api.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ projectNames: {} }));
+    expect(useDeck.getState().settings.projectNames).toEqual({});
+    expect(useDeck.getState().error).toBeNull();
+  });
+
+  it("keeps a title tsk has already and drops the name", async () => {
+    await launchWith({ [A]: "Alpha" }, [row({ number: 1, status: "ready", project: A, project_title: "Kept" })]);
+    expect(api.setProjectTitle).not.toHaveBeenCalled();
+    expect(useDeck.getState().settings.projectNames).toEqual({});
+  });
+
+  it("keeps each refused name for the next launch and lists the refusals in one alert", async () => {
+    vi.mocked(api.setProjectTitle).mockImplementation(async (path) => {
+      if (path === B) throw { kind: "refused", code: "title-taken", message: "title beta is used by /home/test/z" };
+    });
+    await launchWith({ [A]: "Alpha", [B]: "Beta", [C]: "-x" });
+    expect(api.setProjectTitle).not.toHaveBeenCalledWith(C, "-x");
+    expect(useDeck.getState().settings.projectNames).toEqual({ [B]: "Beta", [C]: "-x" });
+    expect(useDeck.getState().errorTitle).toBe("Some project names couldn't be moved to tsk");
+    expect(useDeck.getState().error).toBe(
+      [
+        "Beta (/home/test/b): title beta is used by /home/test/z",
+        "-x (/home/test/c): A project name can't start with “-”.",
+        "tskdeck keeps these names and tries again at the next launch.",
+      ].join("\n"),
+    );
+  });
+
+  it("keeps a title tsk has for a project with only done tasks", async () => {
+    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.14.0", supported: true, minimum: "0.13.0", projectTitles: true });
+    vi.mocked(api.getSettings).mockResolvedValue({ ...settings, projectNames: { [B]: "Beta" } });
+    vi.mocked(api.saveSettings).mockResolvedValue();
+    vi.mocked(api.listScope).mockImplementation(async (_scope, options) =>
+      options.shelf === "done" ? [row({ number: 2, status: "done", project: B, project_title: "Kept" })] : [],
+    );
+    await useDeck.getState().init();
+    expect(api.setProjectTitle).not.toHaveBeenCalled();
+    expect(useDeck.getState().settings.projectNames).toEqual({});
+  });
+
+  it("leaves the names for the next launch when tsk can't list the titled projects", async () => {
+    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.14.0", supported: true, minimum: "0.13.0", projectTitles: true });
+    vi.mocked(api.getSettings).mockResolvedValue({ ...settings, projectNames: { [A]: "Alpha" } });
+    vi.mocked(api.listScope).mockRejectedValue({ kind: "store", message: "store is locked" });
+    await useDeck.getState().init();
+    expect(api.setProjectTitle).not.toHaveBeenCalled();
+    expect(useDeck.getState().settings.projectNames).toEqual({ [A]: "Alpha" });
+  });
+
+  it("leaves the names in settings on a tsk without titles", async () => {
+    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0", projectTitles: false });
+    vi.mocked(api.getSettings).mockResolvedValue({ ...settings, projectNames: { [A]: "Alpha" } });
+    await useDeck.getState().init();
+    expect(api.setProjectTitle).not.toHaveBeenCalled();
+    expect(useDeck.getState().settings.projectNames).toEqual({ [A]: "Alpha" });
   });
 });
 

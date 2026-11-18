@@ -21,6 +21,7 @@ import type { Handler, Handlers } from "../keys/useKeymap";
 import { useKeymap } from "../keys/useKeymap";
 import { menuAccelerators, runMenuItem } from "../menu";
 import type { DeckState } from "../state/store";
+import { useProjectNames } from "../state/projectNames";
 import { failure, useDeck } from "../state/store";
 import { checkForUpdatesNow, subscribeToUpdates } from "../updates/checks";
 import { AssignDialog } from "./AssignDialog";
@@ -202,6 +203,7 @@ export function Shell() {
   const markMode = useDeck((s) => s.markMode);
   const scope = useDeck((s) => s.scope);
   const allRows = useDeck((s) => s.allRows);
+  const listedRows = useDeck((s) => s.listedRows);
   const options = useDeck((s) => s.options);
   const undoName = useDeck((s) => (s.irreversible === null ? (s.undo[s.undo.length - 1]?.label ?? null) : null));
   const canUndo = useDeck((s) => s.irreversible !== null || s.undo.length > 0);
@@ -226,7 +228,9 @@ export function Shell() {
   const slotOpen = (openTask !== null && !overlay) || drawer;
   const collapsed = width < NARROW_WIDTH && slotOpen;
   const sidebarHidden = settings.sidebarHidden || (collapsed && !sidebarShown);
-  const projectNames = settings.projectNames;
+  // The listed rows are included so a project with no live rows gets its name on the done or archived shelf.
+  const shownRows = useMemo(() => [...allRows, ...listedRows], [allRows, listedRows]);
+  const projectNames = useProjectNames(shownRows);
   const title = useMemo(
     () => scopeTitle(scope, sidebarModel(allRows, projectNames), projectNames),
     [scope, allRows, projectNames],
@@ -304,7 +308,7 @@ export function Shell() {
   function folderLabel(path: string): string {
     const others = { ...projectNames };
     delete others[path];
-    return projectLabelsOf(allRows, others).get(path) ?? path;
+    return projectLabelsOf(shownRows, others).get(path) ?? path;
   }
   // Acts on what is on screen: a sidebar the narrow window collapsed shows without changing the
   // saved choice, and one shown over that collapse hides the same way.
@@ -507,9 +511,10 @@ export function Shell() {
           name={projectNames[renaming] ?? ""}
           folderLabel={folderLabel(renaming)}
           onClose={() => setRenaming(null)}
-          onSubmit={(name) => {
-            setRenaming(null);
-            void useDeck.getState().renameProject(renaming, name);
+          onSubmit={async (name) => {
+            const refusal = await useDeck.getState().renameProject(renaming, name);
+            if (refusal === null) setRenaming(null);
+            return refusal;
           }}
         />
       )}

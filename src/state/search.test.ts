@@ -17,6 +17,7 @@ vi.mock("../api/client", async (importOriginal) => {
       step: vi.fn(),
       reply: vi.fn(),
       setArchived: vi.fn(),
+      setProjectTitle: vi.fn(),
       getSettings: vi.fn(),
       saveSettings: vi.fn(),
     },
@@ -79,7 +80,7 @@ describe("search", () => {
       callback = cb;
       return () => {};
     });
-    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0" });
+    vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0", projectTitles: false });
     vi.mocked(api.getSettings).mockResolvedValue({ openMode: "beside", keymap: {}, tskPath: null, sidebarHidden: false, projectNames: {}, checkForUpdates: true });
     vi.mocked(api.listScope).mockResolvedValue([row({ number: 1 })]);
     await useDeck.getState().init();

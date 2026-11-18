@@ -12,7 +12,7 @@ use crate::tsk::args::{self, CaptureInput, EditInput, ListOptions, Scope, Status
 use crate::tsk::locate;
 use crate::tsk::model::{AddResult, TaskDetail, TaskRow};
 use crate::tsk::runner::{Tsk, TskError};
-use crate::tsk::version::{MIN_TSK, parse_version};
+use crate::tsk::version::{MIN_TSK, PROJECT_TITLES_TSK, parse_version};
 use crate::updates::{UPDATE_PROGRESS_EVENT, UpdateInfo, UpdateManager};
 use crate::watch::StoreWatcher;
 
@@ -33,6 +33,8 @@ pub struct TskInfo {
     pub version: String,
     pub supported: bool,
     pub minimum: String,
+    /// Whether this tsk keeps project titles.
+    pub project_titles: bool,
 }
 
 /// Finds the `tsk` binary from the user's setting, the login-shell `PATH` and the
@@ -118,6 +120,7 @@ pub async fn tsk_info(state: State<'_, AppState>) -> Result<TskInfo, TskError> {
             version: format!("{}.{}.{}", parsed.0, parsed.1, parsed.2),
             supported: parsed >= MIN_TSK,
             minimum: format!("{}.{}.{}", MIN_TSK.0, MIN_TSK.1, MIN_TSK.2),
+            project_titles: parsed >= PROJECT_TITLES_TSK,
         })
     })
     .await
@@ -208,6 +211,20 @@ pub async fn set_archived(
 ) -> Result<(), TskError> {
     with_tsk(&state, move |tsk| {
         tsk.run(&args::archive_args(number, archived)).map(drop)
+    })
+    .await
+}
+
+/// Shows the project at `path` under `title`, or under its folder name when `title` is `None`.
+#[tauri::command]
+pub async fn set_project_title(
+    state: State<'_, AppState>,
+    path: String,
+    title: Option<String>,
+) -> Result<(), TskError> {
+    with_tsk(&state, move |tsk| {
+        tsk.run(&args::project_title_args(&path, title.as_deref()))
+            .map(drop)
     })
     .await
 }

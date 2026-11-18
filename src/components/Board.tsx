@@ -6,6 +6,7 @@ import { projectLabelsOf } from "../board/sidebar";
 import { STATUS_LABELS } from "../board/status";
 import { isTextTarget } from "../keys/keymap";
 import { boardOrder, filterRows, useDeck } from "../state/store";
+import { useProjectNames } from "../state/projectNames";
 import { Loading } from "./Loading";
 import { SymbolIcon } from "./SymbolIcon";
 
@@ -187,17 +188,18 @@ export function Board(props: { onNewTask: () => void }) {
   const open = useDeck((s) => s.open);
   const setQuery = useDeck((s) => s.setQuery);
   const grouping = useDeck((s) => s.options.group);
-  const projectNames = useDeck((s) => s.settings.projectNames);
 
   const rows = useMemo(() => filterRows(allListed, query, searchIndex), [allListed, query, searchIndex]);
   const board = useMemo(() => buildBoard(rows, liveNumbersOf(allRows)), [rows, allRows]);
   const order = useMemo(() => boardOrder(rows, allRows), [rows, allRows]);
+  const shownRows = useMemo(() => [...allRows, ...allListed], [allRows, allListed]);
+  const projectNames = useProjectNames(shownRows);
   // tsk names a project group by its folder, so projects are grouped by path and headed by their label.
   const groupOf = useMemo((): GroupOf => {
     if (grouping !== "project") return TSK_GROUP;
-    const labels = projectLabelsOf([...allRows, ...allListed], projectNames);
+    const labels = projectLabelsOf(shownRows, projectNames);
     return (row) => (row.project ? { key: row.project, name: labels.get(row.project) ?? row.project } : TSK_GROUP(row));
-  }, [grouping, allRows, allListed, projectNames]);
+  }, [grouping, shownRows, projectNames]);
   const list = useRef<HTMLDivElement>(null);
   function pick(row: TaskRow) {
     void open(row.number);

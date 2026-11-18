@@ -2,6 +2,9 @@
 
 pub const MIN_TSK: (u32, u32, u32) = (0, 13, 0);
 
+/// The first tsk that keeps project titles (`tsk project title`, `project_title` on rows).
+pub const PROJECT_TITLES_TSK: (u32, u32, u32) = (0, 14, 0);
+
 /// Reads `tsk 0.13.0` into `(0, 13, 0)`.
 pub fn parse_version(output: &str) -> Option<(u32, u32, u32)> {
     let token = output.trim().strip_prefix("tsk ")?.split_whitespace().next()?;
@@ -33,5 +36,11 @@ mod tests {
     fn min_version_ordering() {
         assert!((0, 12, 9) < MIN_TSK);
         assert!((0, 13, 1) >= MIN_TSK);
+    }
+
+    #[test]
+    fn project_titles_start_at_0_14_0() {
+        assert!((0, 13, 9) < PROJECT_TITLES_TSK);
+        assert!((0, 14, 0) >= PROJECT_TITLES_TSK);
     }
 }

@@ -10,14 +10,14 @@ tskdeck shows the board next to an always-visible sidebar of views, projects, th
 
 ## Requirements
 
-- [tsk 0.13.0 or later](https://gettsk.sh/docs/install/)
+- [tsk 0.13.0 or later](https://gettsk.sh/docs/install/). Project titles need tsk 0.14.0 or later.
 
 tskdeck finds `tsk` from the path set in settings, then the login shell's `PATH`, then the default install locations. It respects `TSK_STATE_DIR`.
 
 ## What works
 
 - Sidebar with Views (Desk, All projects), Projects, Threads and Assignees, each with a live task count.
-- Project names: right-click a project in the sidebar and choose Rename… to give it a name tskdeck shows wherever the project appears. tsk keeps the project's path.
+- Project names: right-click a project in the sidebar and choose Rename… to give it a name shown wherever the project appears. On tsk 0.14.0 or later the name is the tsk project title, so the terminal board and `tsk -p` use it too, and the names tskdeck kept in its settings move into tsk at launch. On older tsk, tskdeck keeps the name in its own settings.
 - Board with the NEEDS YOU, IN MOTION and ON DECK sections, plus group and sort controls.
 - Task view beside the board or as an overlay: title and notes edited in place, status, assignee and "runs after", steps, activity, and Done, Reply and Archive actions.
 - The blocked and review workflow: block and review cards, options, replies, approve and send back, and changing who a task waits on. Review checks are shown read-only.
@@ -60,7 +60,7 @@ xattr -dr com.apple.quarantine /Applications/tskdeck.app
 
 ## Settings
 
-tskdeck keeps its settings (open-task mode, keymap, path to `tsk`, update checks) in `settings.json` inside the app config directory for the identifier `com.s3rgiosan.tskdeck`:
+tskdeck keeps its settings (open-task mode, keymap, path to `tsk`, update checks, and the project names not yet moved into tsk) in `settings.json` inside the app config directory for the identifier `com.s3rgiosan.tskdeck`:
 
 - macOS: `~/Library/Application Support/com.s3rgiosan.tskdeck/settings.json`
 - Linux: `$XDG_CONFIG_HOME/com.s3rgiosan.tskdeck/settings.json`, or `~/.config/com.s3rgiosan.tskdeck/settings.json` when `XDG_CONFIG_HOME` is unset
@@ -89,7 +89,7 @@ npm test
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-The contract test runs the real `tsk` binary against a temporary store. It needs tsk 0.13.0 on `PATH`:
+The contract test runs the real `tsk` binary against a temporary store. It needs tsk 0.14.0 or later on `PATH`:
 
 ```sh
 cargo test --manifest-path src-tauri/Cargo.toml --test contract -- --ignored
