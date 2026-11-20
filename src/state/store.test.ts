@@ -390,6 +390,7 @@ describe("moving project names into tsk", () => {
   const A = "/home/test/a";
   const B = "/home/test/b";
   const C = "/home/test/c";
+  const D = "/home/test/d";
 
   function launchWith(projectNames: Record<string, string>, rows = [row({ number: 1, status: "ready", project: A })]) {
     vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.14.0", supported: true, minimum: "0.13.0", projectTitles: true });
@@ -419,33 +420,31 @@ describe("moving project names into tsk", () => {
     vi.mocked(api.setProjectTitle).mockImplementation(async (path) => {
       if (path === B) throw { kind: "refused", code: "invalid-title", message: "title is too long" };
     });
-    await launchWith({ [A]: "Alpha", [B]: "Beta", [C]: "-x" });
-    expect(api.setProjectTitle).not.toHaveBeenCalledWith(C, "-x");
-    expect(useDeck.getState().settings.projectNames).toEqual({ [B]: "Beta", [C]: "-x" });
+    await launchWith({ [A]: "Alpha", [B]: "Beta" });
+    expect(useDeck.getState().settings.projectNames).toEqual({ [B]: "Beta" });
     expect(useDeck.getState().errorTitle).toBe("Some project names couldn't be moved to tsk");
     expect(useDeck.getState().error).toBe(
-      [
-        "Beta (/home/test/b): title is too long",
-        "-x (/home/test/c): A project name can't start with “-”.",
-        "tskdeck keeps these names and tries again at the next launch.",
-      ].join("\n"),
+      ["Beta (/home/test/b): title is too long", "tskdeck keeps these names and tries again at the next launch."].join("\n"),
     );
   });
 
-  it("drops a name whose title another project has and lists it apart in the alert", async () => {
+  it("drops each name tsk can never take and lists it apart in the alert", async () => {
     vi.mocked(api.setProjectTitle).mockImplementation(async (path) => {
       if (path === B) throw { kind: "refused", code: "title-taken", message: "title beta is used by /home/test/z" };
+      if (path === D) throw { kind: "refused", code: "invalid-title", message: "title is too long" };
     });
-    await launchWith({ [A]: "Alpha", [B]: "Beta", [C]: "-x" });
-    expect(useDeck.getState().settings.projectNames).toEqual({ [C]: "-x" });
-    expect(api.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ projectNames: { [C]: "-x" } }));
+    await launchWith({ [A]: "Alpha", [B]: "Beta", [C]: "-x", [D]: "Delta" });
+    expect(api.setProjectTitle).not.toHaveBeenCalledWith(C, "-x");
+    expect(useDeck.getState().settings.projectNames).toEqual({ [D]: "Delta" });
+    expect(api.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ projectNames: { [D]: "Delta" } }));
     expect(useDeck.getState().errorTitle).toBe("Some project names couldn't be moved to tsk");
     expect(useDeck.getState().error).toBe(
       [
         "Beta (/home/test/b): title beta is used by /home/test/z",
-        "Another project has each of these titles, so tskdeck dropped these names. Rename these projects to give them a new name.",
-        "",
         "-x (/home/test/c): A project name can't start with “-”.",
+        "tsk can't take these names, so tskdeck dropped them. Rename these projects to give them a new name.",
+        "",
+        "Delta (/home/test/d): title is too long",
         "tskdeck keeps these names and tries again at the next launch.",
       ].join("\n"),
     );
@@ -453,12 +452,13 @@ describe("moving project names into tsk", () => {
 
   it("shows only the dropped names when tsk refuses no other name", async () => {
     vi.mocked(api.setProjectTitle).mockRejectedValue({ kind: "refused", code: "title-taken", message: "title alpha is used by /home/test/z" });
-    await launchWith({ [A]: "Alpha" });
+    await launchWith({ [A]: "Alpha", [C]: "-x" });
     expect(useDeck.getState().settings.projectNames).toEqual({});
     expect(useDeck.getState().error).toBe(
       [
         "Alpha (/home/test/a): title alpha is used by /home/test/z",
-        "Another project has each of these titles, so tskdeck dropped these names. Rename these projects to give them a new name.",
+        "-x (/home/test/c): A project name can't start with “-”.",
+        "tsk can't take these names, so tskdeck dropped them. Rename these projects to give them a new name.",
       ].join("\n"),
     );
   });

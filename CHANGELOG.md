@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- At launch, a kept project name that starts with "-" leaves the settings after one alert, because tsk can't take it as a title. Before, tskdeck tried again and showed the same alert at each launch.
+
 ## [1.2.1] - 2026-11-20
 
 ### Fixed

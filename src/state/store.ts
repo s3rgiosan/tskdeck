@@ -178,9 +178,10 @@ let namesMoved: Promise<void> = Promise.resolve();
 
 /**
  * Moves the project names kept in settings into tsk as project titles, one time. A project that has a
- * title already keeps it. A name whose title another project has leaves settings, because each try
- * fails the same way. A name tsk refuses for another reason stays in settings for the next try. One
- * alert lists each refusal. When tsk can't list the titled projects, the names wait for the next launch.
+ * title already keeps it. A name that tsk can never take leaves settings, because each try fails the
+ * same way: its title starts with "-", or another project has it. A name tsk refuses for another reason
+ * stays in settings for the next try. One alert lists each refusal. When tsk can't list the titled
+ * projects, the names wait for the next launch.
  */
 async function moveNamesToTsk(set: Set_, get: Get_): Promise<void> {
   const { tsk, settings } = get();
@@ -191,7 +192,7 @@ async function moveNamesToTsk(set: Set_, get: Get_): Promise<void> {
     const titled = await titledPaths();
     if (titled === null) return;
     const done: string[] = [];
-    const taken: string[] = [];
+    const dropped: string[] = [];
     const refused: string[] = [];
     let titledNow = false;
     for (const [path, name] of entries) {
@@ -202,7 +203,8 @@ async function moveNamesToTsk(set: Set_, get: Get_): Promise<void> {
       }
       const problem = titleProblem(title);
       if (problem !== null) {
-        refused.push(`${title} (${path}): ${problem}`);
+        done.push(path);
+        dropped.push(`${title} (${path}): ${problem}`);
         continue;
       }
       try {
@@ -213,7 +215,7 @@ async function moveNamesToTsk(set: Set_, get: Get_): Promise<void> {
         const line = `${title} (${path}): ${messageOf(e)}`;
         if (refusalCodeOf(e) === "title-taken") {
           done.push(path);
-          taken.push(line);
+          dropped.push(line);
         } else {
           refused.push(line);
         }
@@ -222,11 +224,11 @@ async function moveNamesToTsk(set: Set_, get: Get_): Promise<void> {
     if (done.length > 0) await queueSave(set, get, (current) => withoutNames(current, done));
     if (titledNow) await get().refresh();
     const groups: string[] = [];
-    if (taken.length > 0) {
+    if (dropped.length > 0) {
       groups.push(
         [
-          ...taken,
-          "Another project has each of these titles, so tskdeck dropped these names. Rename these projects to give them a new name.",
+          ...dropped,
+          "tsk can't take these names, so tskdeck dropped them. Rename these projects to give them a new name.",
         ].join("\n"),
       );
     }
