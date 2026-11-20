@@ -178,8 +178,9 @@ let namesMoved: Promise<void> = Promise.resolve();
 
 /**
  * Moves the project names kept in settings into tsk as project titles, one time. A project that has a
- * title already keeps it. A name tsk refuses stays in settings for the next try, and one alert lists
- * each refusal. When tsk can't list the titled projects, the names wait for the next launch.
+ * title already keeps it. A name whose title another project has leaves settings, because each try
+ * fails the same way. A name tsk refuses for another reason stays in settings for the next try. One
+ * alert lists each refusal. When tsk can't list the titled projects, the names wait for the next launch.
  */
 async function moveNamesToTsk(set: Set_, get: Get_): Promise<void> {
   const { tsk, settings } = get();
@@ -190,6 +191,7 @@ async function moveNamesToTsk(set: Set_, get: Get_): Promise<void> {
     const titled = await titledPaths();
     if (titled === null) return;
     const done: string[] = [];
+    const taken: string[] = [];
     const refused: string[] = [];
     let titledNow = false;
     for (const [path, name] of entries) {
@@ -208,15 +210,30 @@ async function moveNamesToTsk(set: Set_, get: Get_): Promise<void> {
         done.push(path);
         titledNow = true;
       } catch (e) {
-        refused.push(`${title} (${path}): ${messageOf(e)}`);
+        const line = `${title} (${path}): ${messageOf(e)}`;
+        if (refusalCodeOf(e) === "title-taken") {
+          done.push(path);
+          taken.push(line);
+        } else {
+          refused.push(line);
+        }
       }
     }
     if (done.length > 0) await queueSave(set, get, (current) => withoutNames(current, done));
     if (titledNow) await get().refresh();
-    if (refused.length > 0) {
-      const text = [...refused, "tskdeck keeps these names and tries again at the next launch."].join("\n");
-      set(failure("Some project names couldn't be moved to tsk", text));
+    const groups: string[] = [];
+    if (taken.length > 0) {
+      groups.push(
+        [
+          ...taken,
+          "Another project has each of these titles, so tskdeck dropped these names. Rename these projects to give them a new name.",
+        ].join("\n"),
+      );
     }
+    if (refused.length > 0) {
+      groups.push([...refused, "tskdeck keeps these names and tries again at the next launch."].join("\n"));
+    }
+    if (groups.length > 0) set(failure("Some project names couldn't be moved to tsk", groups.join("\n\n")));
   } finally {
     movingNames = false;
   }
@@ -258,6 +275,12 @@ function messageOf(e: unknown): string {
 
 function kindOf(e: unknown): string | null {
   return typeof e === "object" && e !== null && "kind" in e ? String((e as { kind: unknown }).kind) : null;
+}
+
+/** The code of a tsk refusal, or null when `e` is not a refusal. */
+function refusalCodeOf(e: unknown): string | null {
+  if (kindOf(e) !== "refused") return null;
+  return "code" in (e as object) ? String((e as { code: unknown }).code) : null;
 }
 
 /** A failed write's text: tsk's message, followed by a note that the board was re-read when tsk could not save. */

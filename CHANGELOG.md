@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - With tsk 0.14.0 or later, Rename… sets the tsk project title, and tskdeck shows the titles that tsk keeps, including ones set from the terminal board or by an agent. A refused name stays in the Rename Project sheet with tsk's reason. At launch, tskdeck moves the names it kept in its settings into tsk; a name that tsk refuses stays in the settings, and an alert lists it. With older tsk, tskdeck keeps the names in its settings as before.
 
+### Fixed
+
+- At launch, a kept project name whose title another project has in tsk leaves the settings after one alert. Before, tskdeck tried again and showed the same alert at each launch.
+
 ## [1.1.1] - 2026-11-06
 
 ### Fixed
