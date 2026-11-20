@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-20
+
 ### Fixed
 
 - At launch, a kept project name whose title another project has in tsk leaves the settings after one alert. Before, tskdeck tried again and showed the same alert at each launch.
@@ -62,7 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A content security policy for the app's windows, and an absolute path required for the `tsk` binary in Settings.
 
-[Unreleased]: https://github.com/s3rgiosan/tskdeck/compare/1.2.0...HEAD
+[Unreleased]: https://github.com/s3rgiosan/tskdeck/compare/1.2.1...HEAD
+[1.2.1]: https://github.com/s3rgiosan/tskdeck/compare/1.2.0...1.2.1
 [1.2.0]: https://github.com/s3rgiosan/tskdeck/compare/1.1.1...1.2.0
 [1.1.1]: https://github.com/s3rgiosan/tskdeck/compare/1.1.0...1.1.1
 [1.1.0]: https://github.com/s3rgiosan/tskdeck/compare/1.0.1...1.1.0
