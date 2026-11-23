@@ -3,7 +3,7 @@ import { api, onBoardChanged } from "../api/client";
 import type { Settings } from "../api/types";
 import { sidebarModel } from "../board/sidebar";
 import { detail, row } from "../test/fixtures";
-import { resetBoardSubscription, useDeck } from "./store";
+import { resetBoardReads, resetBoardSubscription, useDeck } from "./store";
 
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
@@ -32,6 +32,7 @@ const settings = { openMode: "beside" as const, keymap: {}, tskPath: null, sideb
 
 beforeEach(() => {
   resetBoardSubscription();
+  resetBoardReads();
   vi.resetAllMocks();
   useDeck.setState(useDeck.getInitialState(), true);
   vi.mocked(api.tskInfo).mockResolvedValue({ path: "/bin/tsk", version: "0.13.0", supported: true, minimum: "0.13.0", projectTitles: false });
@@ -190,6 +191,30 @@ describe("useDeck", () => {
   });
 });
 
+describe("refresh coalescing", () => {
+  it("reads the board once at a time and once more for the changes that came in meanwhile", async () => {
+    useDeck.setState({ scope: { kind: "all" } });
+    const releases: ((rows: ReturnType<typeof row>[]) => void)[] = [];
+    vi.mocked(api.listScope).mockImplementation(() => new Promise((r) => releases.push(r)));
+    const release = (from: number, title: string) =>
+      releases.slice(from).forEach((r) => r([row({ number: 1, status: "ready", title })]));
+
+    const first = useDeck.getState().refresh();
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    const later = [1, 2, 3, 4].map(() => useDeck.getState().refresh());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(releases).toHaveLength(2);
+
+    release(0, "Stale");
+    await vi.waitFor(() => expect(releases).toHaveLength(4));
+    release(2, "Fresh");
+    await Promise.all([first, ...later]);
+
+    expect(releases).toHaveLength(4);
+    expect(useDeck.getState().rows[0].title).toBe("Fresh");
+  });
+});
+
 describe("cursor", () => {
   it("moves to the task in its place when the cursor task leaves the board", async () => {
     useDeck.setState({ scope: { kind: "all" } });
@@ -217,9 +242,9 @@ describe("capture cursor", () => {
     const capturing = useDeck.getState().capture({ title: "Example task" });
     await vi.waitFor(() => expect(releases).toHaveLength(1));
     const watching = useDeck.getState().refresh();
-    await vi.waitFor(() => expect(releases).toHaveLength(2));
     releases[0](rows);
     await capturing;
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
     releases[1](rows);
     await watching;
     expect(useDeck.getState().cursor).toBe(9);

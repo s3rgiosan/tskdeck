@@ -19,7 +19,7 @@ import {
   zoom,
 } from "../api/client";
 import type { TaskRow } from "../api/types";
-import { useDeck } from "../state/store";
+import { resetBoardReads, useDeck } from "../state/store";
 import { useUpdates } from "../state/updates";
 import { blockOn, detail, row } from "../test/fixtures";
 import { Shell } from "./Shell";
@@ -87,6 +87,7 @@ async function mountWith(rows: TaskRow[], { projectTitles = false } = {}) {
 }
 
 beforeEach(() => {
+  resetBoardReads();
   vi.resetAllMocks();
   useDeck.setState(useDeck.getInitialState(), true);
   vi.mocked(api.relocateTsk).mockResolvedValue();

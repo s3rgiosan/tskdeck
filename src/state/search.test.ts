@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api, onBoardChanged } from "../api/client";
 import { detail, row } from "../test/fixtures";
-import { resetBoardSubscription, useDeck } from "./store";
+import { resetBoardReads, resetBoardSubscription, useDeck } from "./store";
 
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
@@ -27,6 +27,7 @@ vi.mock("../api/client", async (importOriginal) => {
 
 beforeEach(() => {
   resetBoardSubscription();
+  resetBoardReads();
   vi.resetAllMocks();
   useDeck.setState(useDeck.getInitialState(), true);
   vi.mocked(onBoardChanged).mockResolvedValue(() => {});

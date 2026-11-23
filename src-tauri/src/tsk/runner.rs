@@ -5,6 +5,7 @@ use std::io::{self, Read};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
+use std::sync::{Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -17,6 +18,52 @@ const RUN_TIMEOUT: Duration = Duration::from_secs(60);
 /// How long to keep reading output after `tsk` exits, for when a process it started
 /// still holds the pipes.
 const PIPE_GRACE: Duration = Duration::from_secs(2);
+
+/// How many `tsk` commands may run at once. Each run holds two pipes and two reader
+/// threads, so a `tsk` that waits on the store lock must not let runs pile up past
+/// the open-file limit.
+const MAX_RUNS: usize = 8;
+
+static RUNS: Gate = Gate::new(MAX_RUNS);
+
+/// A counting semaphore: `enter` waits until fewer than `limit` holders are inside.
+struct Gate {
+    limit: usize,
+    inside: Mutex<usize>,
+    freed: Condvar,
+}
+
+impl Gate {
+    const fn new(limit: usize) -> Self {
+        Self {
+            limit,
+            inside: Mutex::new(0),
+            freed: Condvar::new(),
+        }
+    }
+
+    fn enter(&self) -> Permit<'_> {
+        let mut inside = self.inside.lock().unwrap_or_else(|e| e.into_inner());
+        while *inside >= self.limit {
+            inside = self.freed.wait(inside).unwrap_or_else(|e| e.into_inner());
+        }
+        *inside += 1;
+        Permit { gate: self }
+    }
+}
+
+/// A place inside a `Gate`, given back on drop.
+struct Permit<'a> {
+    gate: &'a Gate,
+}
+
+impl Drop for Permit<'_> {
+    fn drop(&mut self) {
+        let mut inside = self.gate.inside.lock().unwrap_or_else(|e| e.into_inner());
+        *inside -= 1;
+        self.gate.freed.notify_one();
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, thiserror::Error)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -86,8 +133,10 @@ impl Tsk {
         self.run_within(args, RUN_TIMEOUT)
     }
 
-    /// Runs `tsk` and kills it when it has not exited within `timeout`.
+    /// Runs `tsk` and kills it when it has not exited within `timeout`. The run
+    /// waits for a free place first, and `timeout` counts from when it starts.
     fn run_within(&self, args: &[String], timeout: Duration) -> Result<String, TskError> {
+        let _permit = RUNS.enter();
         let mut cmd = Command::new(&self.bin);
         cmd.args(args)
             .stdin(Stdio::null())
@@ -236,6 +285,33 @@ mod tests {
     fn output_larger_than_a_pipe_buffer_is_read_in_full() {
         let big = "x".repeat(100_000);
         assert_eq!(fake(&big, "", 0).run(&[]).unwrap().len(), big.len());
+    }
+
+    #[test]
+    fn gate_lets_no_more_than_its_limit_through_at_once() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let gate = Arc::new(Gate::new(3));
+        let inside = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let threads: Vec<_> = (0..12)
+            .map(|_| {
+                let (gate, inside, peak) =
+                    (Arc::clone(&gate), Arc::clone(&inside), Arc::clone(&peak));
+                thread::spawn(move || {
+                    let _permit = gate.enter();
+                    let now = inside.fetch_add(1, Ordering::SeqCst) + 1;
+                    peak.fetch_max(now, Ordering::SeqCst);
+                    thread::sleep(Duration::from_millis(20));
+                    inside.fetch_sub(1, Ordering::SeqCst);
+                })
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        assert_eq!(peak.load(Ordering::SeqCst), 3);
     }
 
     #[test]

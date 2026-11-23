@@ -337,6 +337,12 @@ function finishesOpenTask(cmd: Command, openTask: number | null): boolean {
 
 /** Keeps a slow listing from overwriting a newer one. */
 let refreshSeq = 0;
+/**
+ * The board read in flight, and the one read queued behind it. A refresh during a read
+ * joins the queued read, so a slow tsk never has more than two board reads waiting.
+ */
+let boardRead: Promise<void> | null = null;
+let queuedRead: Promise<void> | null = null;
 let subscribing = false;
 /** True while an undo runs; a second undo meanwhile is ignored. */
 let undoing = false;
@@ -345,6 +351,12 @@ let settingsSaving: Promise<unknown> = Promise.resolve();
 let unlisten: (() => void) | null = null;
 /** Re-reads the board when the window regains focus, which also lets tskdeck watch a store folder created meanwhile. */
 let onWindowFocus: (() => void) | null = null;
+
+/** Forgets the board reads in flight and queued, so a read left hanging by one test cannot hold up the next. */
+export function resetBoardReads(): void {
+  boardRead = null;
+  queuedRead = null;
+}
 
 /** Drops the board-changed subscription and the window focus listener so the next `init()` can add them again. */
 export function resetBoardSubscription(): void {
@@ -465,6 +477,48 @@ async function fillIndex(set: Set_, get: Get_): Promise<void> {
   set({ searchIndex: new Map([...current, ...found]) });
 }
 
+/** Lists the board and re-reads the open task. */
+async function readBoard(set: Set_, get: Get_): Promise<void> {
+  const seq = ++refreshSeq;
+  const { scope, options } = get();
+  try {
+    const all = api.listScope({ kind: "all" }, LIVE);
+    const [allRows, listed] = await Promise.all([all, listBoard(scope, options, all)]);
+    if (seq !== refreshSeq) return;
+    const rows = listedOrder(listed, options, allRows, get());
+    const { cursor, pendingCursor, openTask, query, searchIndex, marks } = get();
+    // The board as last listed: an optimistic write may already have taken the cursor task off `rows`.
+    const before = boardOrder(filterRows(get().listedRows, query, searchIndex), get().allRows);
+    const visible = filterRows(rows, query, searchIndex);
+    const after = boardOrder(visible, allRows);
+    const captured = pendingCursor !== null && after.some((r) => r.number === pendingCursor);
+    set({
+      allRows,
+      rows,
+      listedRows: rows,
+      loaded: true,
+      cursor: captured ? pendingCursor : keepCursor(cursor, before, after),
+      pendingCursor: null,
+      marks: marksIn(marks, visible),
+    });
+    const searching = get().query.trim();
+    if (searching !== "") void get().ensureSearchIndex();
+    if (openTask !== null) await rereadOpenTask(set, get, seq, openTask);
+  } catch (e) {
+    if (seq !== refreshSeq) return;
+    const kind = kindOf(e);
+    if (kind === "notFound") set({ tskError: e as TskError });
+    set({ ...failure("The board couldn't be loaded", messageOf(e)), loaded: true });
+  }
+}
+
+function startBoardRead(set: Set_, get: Get_): Promise<void> {
+  boardRead = readBoard(set, get).finally(() => {
+    boardRead = null;
+  });
+  return boardRead;
+}
+
 export const useDeck = create<DeckState>()((set, get) => ({
   tsk: null,
   tskError: null,
@@ -535,38 +589,16 @@ export const useDeck = create<DeckState>()((set, get) => ({
     }
   },
 
-  async refresh() {
-    const seq = ++refreshSeq;
-    const { scope, options } = get();
-    try {
-      const all = api.listScope({ kind: "all" }, LIVE);
-      const [allRows, listed] = await Promise.all([all, listBoard(scope, options, all)]);
-      if (seq !== refreshSeq) return;
-      const rows = listedOrder(listed, options, allRows, get());
-      const { cursor, pendingCursor, openTask, query, searchIndex, marks } = get();
-      // The board as last listed: an optimistic write may already have taken the cursor task off `rows`.
-      const before = boardOrder(filterRows(get().listedRows, query, searchIndex), get().allRows);
-      const visible = filterRows(rows, query, searchIndex);
-      const after = boardOrder(visible, allRows);
-      const captured = pendingCursor !== null && after.some((r) => r.number === pendingCursor);
-      set({
-        allRows,
-        rows,
-        listedRows: rows,
-        loaded: true,
-        cursor: captured ? pendingCursor : keepCursor(cursor, before, after),
-        pendingCursor: null,
-        marks: marksIn(marks, visible),
-      });
-      const searching = get().query.trim();
-      if (searching !== "") void get().ensureSearchIndex();
-      if (openTask !== null) await rereadOpenTask(set, get, seq, openTask);
-    } catch (e) {
-      if (seq !== refreshSeq) return;
-      const kind = kindOf(e);
-      if (kind === "notFound") set({ tskError: e as TskError });
-      set({ ...failure("The board couldn't be loaded", messageOf(e)), loaded: true });
-    }
+  refresh() {
+    if (queuedRead !== null) return queuedRead;
+    if (boardRead === null) return startBoardRead(set, get);
+    // The read in flight can miss the newest change, so the queued read replaces its result.
+    refreshSeq++;
+    queuedRead = boardRead.then(() => {
+      queuedRead = null;
+      return startBoardRead(set, get);
+    });
+    return queuedRead;
   },
 
   async selectScope(scope) {

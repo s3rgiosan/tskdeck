@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- While tsk waits on its store lock, tskdeck runs one board read at a time and at most 8 tsk commands at once. Before, each store change and window focus started more tsk runs, until the app ran out of open files and showed "Too many open files (os error 24)".
+
 ## [1.2.2] - 2026-11-20
 
 ### Fixed
